@@ -17,114 +17,101 @@ GRQ_SLATE = "#6B7280"
 GRQ_PALETTE = [GRQ_ORANGE, GRQ_SLATE, GRQ_ORANGE_LIGHT, "#9CA3AF", "#D95D13"]
 
 # Custom minimalist dark-mode styling (Groningen Airport Eelde branding)
-st.markdown(f"""
-    <style>
-    .main {{ padding: 1.5rem 2rem; }}
-    h1, h2, h3 {{ letter-spacing: 0.01em; font-weight: 600; }}
-    
-    /* Custom GRQ Brand Header */
-    .brand-header {{
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        background: linear-gradient(90deg, #1D2023 0%, #262A2E 100%);
-        border: 1px solid #3A3F42;
-        border-left: 5px solid {GRQ_ORANGE};
-        border-radius: 10px;
-        padding: 20px 26px;
-        margin-bottom: 24px;
-    }}
-    .brand-left {{ display: flex; align-items: center; gap: 20px; }}
-    .brand-title {{
-        color: #FFFFFF;
-        font-size: 1.45rem;
-        font-weight: 700;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        margin: 0;
-        line-height: 1.2;
-    }}
-    .brand-subtitle {{
-        color: #D1D5DB;
-        font-size: 0.9rem;
-        margin: 5px 0 0 0;
-    }}
-    .brand-badge {{
-        background-color: rgba(243, 112, 33, 0.14);
-        color: {GRQ_ORANGE};
-        border: 1px solid {GRQ_ORANGE};
-        padding: 5px 14px;
-        border-radius: 20px;
-        font-size: 0.78rem;
-        font-weight: 700;
-        letter-spacing: 0.08em;
-    }}
+st.markdown(f"""<style>
+.main {{ padding: 1.5rem 2rem; }}
+h1, h2, h3 {{ letter-spacing: 0.01em; font-weight: 600; }}
 
-    /* Metric Cards */
-    .stMetric {{
-        background-color: #1D2023;
-        border: 1px solid #3A3F42;
-        border-top: 3px solid {GRQ_ORANGE};
-        padding: 16px;
-        border-radius: 8px;
-    }}
+/* Custom GRQ Brand Header */
+.brand-header {{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(90deg, #1D2023 0%, #262A2E 100%);
+    border: 1px solid #3A3F42;
+    border-left: 5px solid {GRQ_ORANGE};
+    border-radius: 10px;
+    padding: 20px 26px;
+    margin-bottom: 24px;
+}}
+.brand-left {{ display: flex; align-items: center; gap: 20px; }}
+.brand-title {{
+    color: #FFFFFF;
+    font-size: 1.45rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin: 0;
+    line-height: 1.2;
+}}
+.brand-subtitle {{
+    color: #D1D5DB;
+    font-size: 0.9rem;
+    margin: 5px 0 0 0;
+}}
+.brand-badge {{
+    background-color: rgba(243, 112, 33, 0.14);
+    color: {GRQ_ORANGE};
+    border: 1px solid {GRQ_ORANGE};
+    padding: 5px 14px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+}}
 
-    /* Insight & Advies Blokken */
-    .insight-box {{
-        background-color: #1D2023;
-        border: 1px solid #3A3F42;
-        border-left: 4px solid {GRQ_ORANGE};
-        padding: 18px 22px;
-        border-radius: 8px;
-        margin-bottom: 16px;
-        line-height: 1.65;
-    }}
+/* Metric Cards */
+.stMetric {{
+    background-color: #1D2023;
+    border: 1px solid #3A3F42;
+    border-top: 3px solid {GRQ_ORANGE};
+    padding: 16px;
+    border-radius: 8px;
+}}
 
-    /* Tabbladen styling */
-    .stTabs [data-baseweb="tab-list"] {{
-        gap: 8px;
-        border-bottom: 1px solid #3A3F42;
-    }}
-    .stTabs [data-baseweb="tab"] {{
-        background-color: #1D2023;
-        border-radius: 6px 6px 0 0;
-        padding: 10px 18px;
-        color: #9CA3AF;
-        border: 1px solid transparent;
-    }}
-    .stTabs [aria-selected="true"] {{
-        background-color: {GRQ_ORANGE} !important;
-        color: #FFFFFF !important;
-        font-weight: 600;
-        border: 1px solid {GRQ_ORANGE} !important;
-    }}
+/* Insight & Advies Blokken */
+.insight-box {{
+    background-color: #1D2023;
+    border: 1px solid #3A3F42;
+    border-left: 4px solid {GRQ_ORANGE};
+    padding: 18px 22px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    line-height: 1.65;
+}}
 
-    /* Footer */
-    .brand-footer {{
-        margin-top: 48px;
-        padding-top: 16px;
-        border-top: 1px solid #3A3F42;
-        display: flex;
-        justify-content: space-between;
-        color: #9CA3AF;
-        font-size: 0.8rem;
-    }}
-    </style>
-""", unsafe_allow_html=True)
+/* Tabbladen styling */
+.stTabs [data-baseweb="tab-list"] {{
+    gap: 8px;
+    border-bottom: 1px solid #3A3F42;
+}}
+.stTabs [data-baseweb="tab"] {{
+    background-color: #1D2023;
+    border-radius: 6px 6px 0 0;
+    padding: 10px 18px;
+    color: #9CA3AF;
+    border: 1px solid transparent;
+}}
+.stTabs [aria-selected="true"] {{
+    background-color: {GRQ_ORANGE} !important;
+    color: #FFFFFF !important;
+    font-weight: 600;
+    border: 1px solid {GRQ_ORANGE} !important;
+}}
+
+/* Footer */
+.brand-footer {{
+    margin-top: 48px;
+    padding-top: 16px;
+    border-top: 1px solid #3A3F42;
+    display: flex;
+    justify-content: space-between;
+    color: #9CA3AF;
+    font-size: 0.8rem;
+}}
+</style>""", unsafe_allow_html=True)
 
 # Groningen Airport Eelde SVG Beeldmerk (de 6 karakteristieke oranje ovalen)
-GRQ_ICON_SVG = """
-<svg width="46" height="58" viewBox="0 0 80 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <!-- Binnenste boog (3 ovalen) -->
-  <ellipse cx="14" cy="60" rx="7" ry="15" transform="rotate(24 14 60)" fill="#F37021"/>
-  <ellipse cx="32" cy="33" rx="5.5" ry="11.5" transform="rotate(38 32 33)" fill="#F37021"/>
-  <ellipse cx="52" cy="15" rx="3.8" ry="8.5" transform="rotate(50 52 15)" fill="#F37021"/>
-  <!-- Buitenste boog (3 grotere ovalen) -->
-  <ellipse cx="26" cy="80" rx="10.5" ry="19" transform="rotate(22 26 80)" fill="#F37021"/>
-  <ellipse cx="48" cy="40" rx="8.5" ry="16.5" transform="rotate(36 48 40)" fill="#F37021"/>
-  <ellipse cx="68" cy="11" rx="6" ry="13.5" transform="rotate(48 68 11)" fill="#F37021"/>
-</svg>
-"""
+GRQ_ICON_SVG = '<svg width="46" height="58" viewBox="0 0 80 100" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="14" cy="60" rx="7" ry="15" transform="rotate(24 14 60)" fill="#F37021"/><ellipse cx="32" cy="33" rx="5.5" ry="11.5" transform="rotate(38 32 33)" fill="#F37021"/><ellipse cx="52" cy="15" rx="3.8" ry="8.5" transform="rotate(50 52 15)" fill="#F37021"/><ellipse cx="26" cy="80" rx="10.5" ry="19" transform="rotate(22 26 80)" fill="#F37021"/><ellipse cx="48" cy="40" rx="8.5" ry="16.5" transform="rotate(36 48 40)" fill="#F37021"/><ellipse cx="68" cy="11" rx="6" ry="13.5" transform="rotate(48 68 11)" fill="#F37021"/></svg>'
 
 def style_fig(fig):
     """Maakt Plotly-grafieken strak en transparant in GRQ-stijl."""
@@ -138,32 +125,31 @@ def style_fig(fig):
     )
     return fig
 
-# Sidebar Branding
+# Sidebar Branding (zonder inspringing zodat Markdown geen codeblok maakt)
 with st.sidebar:
-    st.markdown(f"""
-        <div style="display:flex; align-items:center; gap:14px; padding-bottom:16px; border-bottom:1px solid #3A3F42; margin-bottom:18px;">
-            {GRQ_ICON_SVG}
-            <div style="line-height:1.25;">
-                <div style="font-weight:700; font-size:0.95rem; letter-spacing:0.08em; color:#FFFFFF;">GRONINGEN</div>
-                <div style="font-weight:700; font-size:0.95rem; letter-spacing:0.08em; color:#FFFFFF;">AIRPORT EELDE</div>
-                <div style="font-size:0.75rem; color:{GRQ_ORANGE}; margin-top:3px; font-weight:600;">Route Development Suite</div>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        f'<div style="display:flex; align-items:center; gap:14px; padding-bottom:16px; border-bottom:1px solid #3A3F42; margin-bottom:18px;">'
+        f'{GRQ_ICON_SVG}'
+        f'<div style="line-height:1.25;">'
+        f'<div style="font-weight:700; font-size:0.95rem; letter-spacing:0.08em; color:#FFFFFF;">GRONINGEN</div>'
+        f'<div style="font-weight:700; font-size:0.95rem; letter-spacing:0.08em; color:#FFFFFF;">AIRPORT EELDE</div>'
+        f'<div style="font-size:0.75rem; color:{GRQ_ORANGE}; margin-top:3px; font-weight:600;">Route Development Suite</div>'
+        f'</div></div>',
+        unsafe_allow_html=True
+    )
 
 # Hoofdheader
-st.markdown(f"""
-    <div class="brand-header">
-        <div class="brand-left">
-            {GRQ_ICON_SVG}
-            <div>
-                <div class="brand-title">GRONINGEN AIRPORT EELDE</div>
-                <div class="brand-subtitle">Route Proposal & Market Analysis — Catchment Leakage, Airport Choice & Netwerkconnectiviteit</div>
-            </div>
-        </div>
-        <div class="brand-badge">GRQ / EHGG</div>
-    </div>
-""", unsafe_allow_html=True)
+st.markdown(
+    f'<div class="brand-header">'
+    f'<div class="brand-left">{GRQ_ICON_SVG}'
+    f'<div>'
+    f'<div class="brand-title">GRONINGEN AIRPORT EELDE</div>'
+    f'<div class="brand-subtitle">Route Proposal & Market Analysis — Catchment Leakage, Airport Choice & Netwerkconnectiviteit</div>'
+    f'</div></div>'
+    f'<div class="brand-badge">GRQ / EHGG</div>'
+    f'</div>',
+    unsafe_allow_html=True
+)
 
 # 1. Excel Bestand Inladen
 @st.cache_data
@@ -324,7 +310,7 @@ with tab_overview:
             if not reasons:
                 reasons.append("• Upload aanvullende rijen voor deze bestemming in de tabbladen *Surface Leakage*, *Airport Choice* en *Route Competitors* om alle factoren te berekenen.")
 
-            st.markdown(f"<div class='insight-box'>{'<br><br>'.join(reasons)}</div>", unsafe_allow_html=True)
+            st.markdown(f'<div class="insight-box">{"<br><br>".join(reasons)}</div>', unsafe_allow_html=True)
 
         with col_when:
             st.subheader("🕒 Wanneer is deze route het best te vliegen?")
@@ -358,7 +344,7 @@ with tab_overview:
             if not schedule_advice:
                 schedule_advice.append("• Voeg weekdagen en Transfer Potential toe in het tabblad *Weighted Connectivity* voor een specifiek dag- en tijdstipadvies.")
 
-            st.markdown(f"<div class='insight-box'>{'<br><br>'.join(schedule_advice)}</div>", unsafe_allow_html=True)
+            st.markdown(f'<div class="insight-box">{"<br><br>".join(schedule_advice)}</div>', unsafe_allow_html=True)
 
         vis1, vis2 = st.columns(2)
         with vis1:
@@ -575,9 +561,10 @@ with tab5:
 # ==========================================
 # BRAND FOOTER
 # ==========================================
-st.markdown("""
-    <div class="brand-footer">
-        <span><strong>Groningen Airport Eelde (GRQ)</strong> — Route Development & Network Analytics</span>
-        <span>Powered by <strong>JR Aviation Solutions</strong></span>
-    </div>
-""", unsafe_allow_html=True)
+st.markdown(
+    '<div class="brand-footer">'
+    '<span><strong>Groningen Airport Eelde (GRQ)</strong> — Route Development & Network Analytics</span>'
+    '<span>Powered by <strong>JR Aviation Solutions</strong></span>'
+    '</div>',
+    unsafe_allow_html=True
+)
