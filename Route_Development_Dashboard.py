@@ -291,15 +291,12 @@ def resolve_coords(text):
     if not text:
         return None
     txt_upper = str(text).upper().strip()
-    # Directe match
     if txt_upper in AIRPORT_COORDS:
         return AIRPORT_COORDS[txt_upper]
-    # Zoek op 3-letterige IATA codes in strings zoals 'AMS-AGP' of 'EHAM - LEPA'
     tokens = re.split(r'[^A-Z0-9]+', txt_upper)
     for tok in tokens:
         if tok in AIRPORT_COORDS and tok not in ["GRQ", "EHGG"]:
             return AIRPORT_COORDS[tok]
-    # Zoek op stadsnaam als substring
     for key, coords in AIRPORT_COORDS.items():
         if len(key) > 3 and key in txt_upper:
             return coords
@@ -627,7 +624,7 @@ with tab2:
         st.info("Geen data beschikbaar voor deze filterselectie.")
 
 # ==========================================
-# TAB 4: ROUTE COMPETITORS (PER ROUTE + LANDKAART)
+# TAB 4: ROUTE COMPETITORS (PER ROUTE + VERGROOTBARE LANDKAART)
 # ==========================================
 with tab3:
     st.subheader("🥊 Route Competitors — Concurrentie per Route op de Kaart")
@@ -635,11 +632,10 @@ with tab3:
     if df_comp_raw.empty:
         st.info("Geen data beschikbaar in 'Route Competitors'.")
     else:
-        # Filter op specifieke route uit Tabblad 1 of alle routes
-        f_col1, f_col2 = st.columns([1.2, 1.8])
+        f_col1, f_col2, f_col3 = st.columns([1.3, 1.5, 1.0])
         with f_col1:
             comp_route_options = ["Alle routes uit Tabblad 1"] + prop_destinations
-            sel_comp_route = st.selectbox("Selecteer route om concurrenten te bekijken:", comp_route_options)
+            sel_comp_route = st.selectbox("Selecteer mogelijke route (Tab 1):", comp_route_options)
         
         if sel_comp_route != "Alle routes uit Tabblad 1":
             df_comp_view = filter_df_multi(df_comp_raw, [sel_comp_route], ['Routing', 'Route', 'Destination'])
@@ -652,10 +648,13 @@ with tab3:
                 sel_catch = st.multiselect("Filter op Concurrerende Luchthaven / Catchment:", catchments, default=catchments)
                 df_comp_view = df_comp_view[df_comp_view['Catchment'].isin(sel_catch)]
 
+        with f_col3:
+            map_size_choice = st.selectbox("Kaartgrootte:", ["Normaal (580px)", "Groot (780px)", "Extra Groot (980px)"], index=1)
+            map_height = 580 if "Normaal" in map_size_choice else (780 if "Groot (780" in map_size_choice else 980)
+
         if df_comp_view.empty:
             st.warning("Geen concurrerende vluchten gevonden voor deze route-selectie.")
         else:
-            # KPI's voor de geselecteerde route-concurrentie
             ck1, ck2, ck3 = st.columns(3)
             tot_c_freq = pd.to_numeric(df_comp_view['Frequency per Week'], errors='coerce').sum() if 'Frequency per Week' in df_comp_view.columns else 0
             tot_c_pax = pd.to_numeric(df_comp_view['PAX from catchment'], errors='coerce').sum() if 'PAX from catchment' in df_comp_view.columns else 0
@@ -664,126 +663,183 @@ with tab3:
             ck2.metric("Totale Concurrentie Freq/wk", f"{int(tot_c_freq)} vl/wk")
             ck3.metric("Weglekkende PAX uit Catchment", f"{int(tot_c_pax):,}".replace(",", "."))
 
-            # --- LANDKAART OPBOUWEN ---
-            map_points = []
-            # 1. Voeg altijd Groningen Airport Eelde (GRQ) toe als referentiepunt
-            grq_lat, grq_lon, grq_name = AIRPORT_COORDS["GRQ"]
-            map_points.append({
-                "Naam": grq_name,
-                "Type": "Eigen Luchthaven (GRQ)",
-                "lat": grq_lat,
-                "lon": grq_lon,
-                "PAX": tot_c_pax if tot_c_pax > 0 else 5000,
-                "Freq": 0,
-                "Info": "Groningen Airport Eelde (Referentiepunt)"
-            })
+            def parse_comp_pair(row_obj, fallback_dest_str):
+                routing_s = str(row_obj.get('Routing', '')).strip()
+                catch_s = str(row_obj.get('Catchment', '')).strip()
+                dest_s = str(row_obj.get('Destination', '')).strip()
 
-            # 2. Zoek coördinaten van concurrerende luchthavens (uit 'Catchment' of 'Routing')
-            lat_col = find_col(df_comp_view, ['Lat', 'Latitude'])
-            lon_col = find_col(df_comp_view, ['Lon', 'Longitude', 'Lng'])
+                origin_c = None
+                dest_c = None
+
+                parts = re.split(r'\s*[-–>/]\s*', routing_s)
+                if len(parts) >= 2:
+                    origin_c = resolve_coords(parts[0])
+                    dest_c = resolve_coords(parts[-1])
+
+                if not origin_c and catch_s:
+                    c_try = resolve_coords(catch_s)
+                    if c_try and c_try[2] != AIRPORT_COORDS["GRQ"][2]:
+                        origin_c = c_try
+
+                if not dest_c:
+                    if dest_s:
+                        dest_c = resolve_coords(dest_s)
+                    if not dest_c and fallback_dest_str != "Alle routes uit Tabblad 1":
+                        dest_c = resolve_coords(fallback_dest_str)
+                    if not dest_c and routing_s:
+                        dest_c = resolve_coords(routing_s)
+
+                return origin_c, dest_c
+
+            grq_lat, grq_lon, grq_name = AIRPORT_COORDS["GRQ"]
+            comp_origins = {}
+            target_dests = {}
+            route_lines = []
 
             for _, row in df_comp_view.iterrows():
-                pax_val = pd.to_numeric(row.get('PAX from catchment', 0), errors='coerce') or 0
-                freq_val = pd.to_numeric(row.get('Frequency per Week', 0), errors='coerce') or 0
+                pax_val = float(pd.to_numeric(row.get('PAX from catchment', 0), errors='coerce') or 0)
+                freq_val = int(pd.to_numeric(row.get('Frequency per Week', 0), errors='coerce') or 0)
                 routing_str = str(row.get('Routing', ''))
                 catch_str = str(row.get('Catchment', ''))
 
-                # Kijk eerst of Excel zelf Lat/Lon kolommen heeft
-                if lat_col and lon_col and pd.notna(row[lat_col]) and pd.notna(row[lon_col]):
-                    lat, lon, label = float(row[lat_col]), float(row[lon_col]), catch_str or routing_str
-                else:
-                    # Probeer eerst de vertrekluchthaven (Catchment) te vinden, anders de bestemming uit Routing
-                    coords = resolve_coords(catch_str) or resolve_coords(routing_str)
-                    if coords:
-                        lat, lon, label = coords
-                    else:
-                        continue
+                orig_c, dest_c = parse_comp_pair(row, sel_comp_route)
+                info_line = f"{routing_str} ({catch_str}) | {freq_val} vl/wk | {int(pax_val):,} PAX".replace(",", ".")
 
-                map_points.append({
-                    "Naam": label,
-                    "Type": "Concurrerende Luchthaven / Route",
-                    "lat": lat,
-                    "lon": lon,
-                    "PAX": max(float(pax_val), 1000.0),
-                    "Freq": int(freq_val),
-                    "Info": f"{routing_str} ({catch_str}) | {int(freq_val)} vl/wk | {int(pax_val):,} PAX".replace(",", ".")
-                })
+                if orig_c:
+                    o_lat, o_lon, o_name = orig_c
+                    if o_name not in comp_origins:
+                        comp_origins[o_name] = {"Naam": o_name, "lat": o_lat, "lon": o_lon, "PAX": 0.0, "Freq": 0, "Infos": []}
+                    comp_origins[o_name]["PAX"] += max(pax_val, 500.0)
+                    comp_origins[o_name]["Freq"] += freq_val
+                    if info_line not in comp_origins[o_name]["Infos"]:
+                        comp_origins[o_name]["Infos"].append(info_line)
 
-            df_map = pd.DataFrame(map_points)
+                if dest_c:
+                    d_lat, d_lon, d_name = dest_c
+                    if d_name not in target_dests:
+                        target_dests[d_name] = {"Naam": d_name, "lat": d_lat, "lon": d_lon, "PAX": 0.0, "Infos": []}
+                    target_dests[d_name]["PAX"] += max(pax_val, 500.0)
+                    if info_line not in target_dests[d_name]["Infos"]:
+                        target_dests[d_name]["Infos"].append(info_line)
 
-            # Aggregeer als meerdere rijen op dezelfde luchthaven vallen
-            if len(df_map) > 1:
-                df_map_agg = df_map.groupby(["Naam", "Type", "lat", "lon"], as_index=False).agg({
-                    "PAX": "sum",
-                    "Freq": "sum",
-                    "Info": lambda x: "<br>".join(list(dict.fromkeys(x)))
-                })
+                # Lijn van Concurrerende Luchthaven -> Mogelijke Bestemming
+                if orig_c and dest_c and (orig_c[2] != dest_c[2]):
+                    route_lines.append({
+                        "o_lat": orig_c[0], "o_lon": orig_c[1],
+                        "d_lat": dest_c[0], "d_lon": dest_c[1],
+                        "label": info_line
+                    })
 
-                fig_map = go.Figure()
+            if sel_comp_route != "Alle routes uit Tabblad 1" and not target_dests:
+                sel_c = resolve_coords(sel_comp_route)
+                if sel_c:
+                    target_dests[sel_c[2]] = {"Naam": sel_c[2], "lat": sel_c[0], "lon": sel_c[1], "PAX": tot_c_pax, "Infos": [f"Voorgestelde route: {sel_comp_route}"]}
 
-                # Teken verbindingslijnen van GRQ naar de concurrerende luchthavens
-                for _, mrow in df_map_agg[df_map_agg["Type"] != "Eigen Luchthaven (GRQ)"].iterrows():
-                    fig_map.add_trace(go.Scattergeo(
-                        lon=[grq_lon, mrow["lon"]],
-                        lat=[grq_lat, mrow["lat"]],
-                        mode="lines",
-                        line=dict(width=1.5, color="rgba(243, 112, 33, 0.45)", dash="dot"),
-                        hoverinfo="skip",
-                        showlegend=False
-                    ))
+            fig_map = go.Figure()
 
-                # Teken de punten op de landkaart
-                for p_type, p_color, p_symbol in [
-                    ("Eigen Luchthaven (GRQ)", GRQ_ORANGE, "star"),
-                    ("Concurrerende Luchthaven / Route", GRQ_TEAL, "circle")
-                ]:
-                    sub_m = df_map_agg[df_map_agg["Type"] == p_type]
-                    if not sub_m.empty:
-                        sizes = [18] if p_type == "Eigen Luchthaven (GRQ)" else [
-                            max(12, min(38, (val / df_map_agg["PAX"].max()) * 38)) for val in sub_m["PAX"]
-                        ]
-                        fig_map.add_trace(go.Scattergeo(
-                            lon=sub_m["lon"],
-                            lat=sub_m["lat"],
-                            text=sub_m["Naam"],
-                            customdata=sub_m["Info"],
-                            hovertemplate="<b>%{text}</b><br>%{customdata}<extra></extra>",
-                            mode="markers+text",
-                            textposition="top center",
-                            name=p_type,
-                            marker=dict(
-                                size=sizes,
-                                color=p_color,
-                                symbol=p_symbol,
-                                line=dict(width=1.5, color="#FFFFFF")
-                            )
-                        ))
+            # 1. Lijnen van Concurrentie -> Mogelijke Route
+            for rl in route_lines:
+                fig_map.add_trace(go.Scattergeo(
+                    lon=[rl["o_lon"], rl["d_lon"]],
+                    lat=[rl["o_lat"], rl["d_lat"]],
+                    mode="lines",
+                    line=dict(width=2.0, color="rgba(13, 148, 136, 0.70)"),
+                    hoverinfo="text",
+                    text=rl["label"],
+                    showlegend=False
+                ))
 
-                fig_map.update_geos(
-                    scope="europe",
-                    resolution=50,
-                    showcountries=True,
-                    countrycolor="rgba(128,128,128,0.45)",
-                    showcoastlines=True,
-                    coastlinecolor="rgba(128,128,128,0.45)",
-                    showland=True,
-                    landcolor="rgba(128,128,128,0.12)",
-                    showocean=True,
-                    oceancolor="rgba(0,0,0,0)",
-                    center=dict(lat=51.8, lon=6.5),
-                    projection_scale=4.2
-                )
-                fig_map.update_layout(
-                    title=f"Geografische Concurrentiekaart: {sel_comp_route}",
-                    paper_bgcolor="rgba(0,0,0,0)",
-                    geo_bgcolor="rgba(0,0,0,0)",
-                    height=500,
-                    margin=dict(t=45, b=10, l=10, r=10),
-                    legend=dict(orientation="h", yanchor="bottom", y=1.01, xanchor="right", x=1)
-                )
-                st.plotly_chart(fig_map, use_container_width=True)
+            # 2. Voorgestelde route-lijn vanaf GRQ -> Mogelijke Route (oranje stippellijn)
+            for d_info in target_dests.values():
+                fig_map.add_trace(go.Scattergeo(
+                    lon=[grq_lon, d_info["lon"]],
+                    lat=[grq_lat, d_info["lat"]],
+                    mode="lines",
+                    line=dict(width=2.2, color="rgba(243, 112, 33, 0.85)", dash="dash"),
+                    hoverinfo="text",
+                    text=f"Potentiële route: GRQ → {d_info['Naam']}",
+                    showlegend=False
+                ))
 
-            # Staafdiagrammen onder de kaart voor exacte vergelijking per routing
+            # 3. Punt: Eigen Luchthaven GRQ
+            fig_map.add_trace(go.Scattergeo(
+                lon=[grq_lon],
+                lat=[grq_lat],
+                text=[grq_name],
+                hovertemplate="<b>%{text}</b><br>Startpunt routevoorstel<extra></extra>",
+                mode="markers+text",
+                textposition="top center",
+                name="Groningen Airport Eelde (GRQ)",
+                marker=dict(size=18, color=GRQ_ORANGE, symbol="star", line=dict(width=1.5, color="#FFFFFF"))
+            ))
+
+            # 4. Punten: Concurrerende Luchthavens
+            if comp_origins:
+                df_o = pd.DataFrame(list(comp_origins.values()))
+                max_o_pax = df_o["PAX"].max() or 1
+                o_sizes = [max(13, min(36, (v / max_o_pax) * 36)) for v in df_o["PAX"]]
+                o_hover = ["<br>".join(i) for i in df_o["Infos"]]
+                fig_map.add_trace(go.Scattergeo(
+                    lon=df_o["lon"],
+                    lat=df_o["lat"],
+                    text=df_o["Naam"],
+                    customdata=o_hover,
+                    hovertemplate="<b>Concurrent: %{text}</b><br>%{customdata}<extra></extra>",
+                    mode="markers+text",
+                    textposition="bottom center",
+                    name="Concurrerende Luchthaven",
+                    marker=dict(size=o_sizes, color=GRQ_TEAL, symbol="circle", line=dict(width=1.5, color="#FFFFFF"))
+                ))
+
+            # 5. Punten: Mogelijke Bestemming(en)
+            if target_dests:
+                df_d = pd.DataFrame(list(target_dests.values()))
+                d_hover = ["<br>".join(i) for i in df_d["Infos"]]
+                fig_map.add_trace(go.Scattergeo(
+                    lon=df_d["lon"],
+                    lat=df_d["lat"],
+                    text=df_d["Naam"],
+                    customdata=d_hover,
+                    hovertemplate="<b>Bestemming: %{text}</b><br>%{customdata}<extra></extra>",
+                    mode="markers+text",
+                    textposition="top center",
+                    name="Mogelijke Bestemming",
+                    marker=dict(size=16, color="#F59E0B", symbol="diamond", line=dict(width=1.5, color="#FFFFFF"))
+                ))
+
+            all_lats = [grq_lat] + [v["lat"] for v in comp_origins.values()] + [v["lat"] for v in target_dests.values()]
+            all_lons = [grq_lon] + [v["lon"] for v in comp_origins.values()] + [v["lon"] for v in target_dests.values()]
+            center_lat = (min(all_lats) + max(all_lats)) / 2
+            center_lon = (min(all_lons) + max(all_lons)) / 2
+            span = max(max(all_lats) - min(all_lats), max(all_lons) - min(all_lons), 4.0)
+            auto_zoom = max(2.2, min(5.5, 22.0 / span))
+
+            fig_map.update_geos(
+                scope="europe",
+                resolution=50,
+                showcountries=True,
+                countrycolor="rgba(128,128,128,0.45)",
+                showcoastlines=True,
+                coastlinecolor="rgba(128,128,128,0.45)",
+                showland=True,
+                landcolor="rgba(128,128,128,0.12)",
+                showocean=True,
+                oceancolor="rgba(0,0,0,0)",
+                center=dict(lat=center_lat, lon=center_lon),
+                projection_scale=auto_zoom
+            )
+            fig_map.update_layout(
+                title=f"Concurrentienetwerk naar Bestemming: {sel_comp_route}",
+                paper_bgcolor="rgba(0,0,0,0)",
+                geo_bgcolor="rgba(0,0,0,0)",
+                height=map_height,
+                autosize=True,
+                dragmode="pan",
+                margin=dict(t=45, b=10, l=0, r=0),
+                legend=dict(orientation="h", yanchor="bottom", y=1.01, xanchor="right", x=1)
+            )
+            st.plotly_chart(fig_map, use_container_width=True, config={"scrollZoom": True, "displayModeBar": True})
+
             c1, c2 = st.columns(2)
             with c1:
                 if {'Routing', 'Frequency per Week', 'Catchment'}.issubset(df_comp_view.columns):
