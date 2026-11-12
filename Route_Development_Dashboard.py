@@ -498,7 +498,11 @@ def build_route_summary(prop_list):
         c_freq = int(pd.to_numeric(s_comp['Frequency per Week'], errors='coerce').sum()) if ('Frequency per Week' in s_comp.columns and not s_comp.empty) else 0
 
         # Gewogen score: 45% Catchment/Leakage Vraag, 35% Transfer & Netwerk Connectivity, 20% Marktruimte (niet-AMS)
-        score = round((0.45 * demand_sc) + (0.35 * min(avg_tr, 100)) + (0.20 * min(alt_capture_sc * 2.5, 100)), 1)
+        v_weighted = 0.45 * demand_sc
+        t_weighted = 0.35 * min(avg_tr, 100)
+        m_sc = min(alt_capture_sc * 2.5, 100)
+        m_weighted = 0.20 * m_sc
+        score = round(v_weighted + t_weighted + m_weighted, 1)
 
         rows.append({
             "Voorgestelde Route (Tab 1)": p["label"],
@@ -510,7 +514,11 @@ def build_route_summary(prop_list):
             "Concurrentie (vl/wk)": c_freq,
             "Beste Vliegdag": best_day,
             "Voorgestelde Vloot": p["acft"],
-            "Voorgestelde Airline": ", ".join(p["airlines"]) if p["airlines"] else "-"
+            "Voorgestelde Airline": ", ".join(p["airlines"]) if p["airlines"] else "-",
+            "_vraag_sc": round(demand_sc, 1),
+            "_transfer_sc": round(min(avg_tr, 100), 1),
+            "_marktruimte_sc": round(m_sc, 1),
+            "_max_prob": round(p_bus if p["pax_type"] == "Business" else p_non, 2)
         })
     return pd.DataFrame(rows).sort_values(by="Potentie Score", ascending=False)
 
@@ -533,7 +541,28 @@ tab_overview, tab_single, tab1, tab2, tab3, tab4, tab5 = st.tabs([
 # TAB 0: GECOMBINEERDE BESLISMATRIX (ALLEEN TAB 1)
 # ==========================================
 with tab_overview:
-    st.subheader("📊 Gecombineerde Beslismatrix (Uitsluitend Routes uit Tabblad 1)")
+    head_col, btn_col = st.columns([2.2, 1.0])
+    with head_col:
+        st.subheader("📊 Gecombineerde Beslismatrix")
+    with btn_col:
+        with st.popover("📐 Formule & Berekening Potentie Score", use_container_width=True):
+            st.markdown("### 📐 Opbouw Potentie Score (0 – 100 pt)")
+            st.latex(r"	ext{Potentie Score} = (0{,}45 	imes 	ext{Vraagscore}) + (0{,}35 	imes 	ext{Transfer Potentieel}) + (0{,}20 	imes 	ext{Marktruimte})")
+            st.markdown("""
+            1. **Vraag vanuit GRQ-catchment (45%):** `Pax leakage` (of `PAX from catchment`), geschaald t.o.v. de grootste route uit Tabblad 1 (`0–100 pt`).
+            2. **Transfer & Netwerk Connectiviteit (35%):** Gemiddelde `Transfer Potential %` over alle weekdagen (`Mo`–`Su`) van de voorgestelde maatschappij.
+            3. **Marktruimte t.o.v. dominante concurrent (20%):** Deel van de reizigers dat *niet* voor de grootste concurrerende routing (zoals AMS) kiest: $\min((100\% - \text{Max. keuzekans}) \times 2{,}5,\; 100)$.
+            """)
+            if not df_matrix.empty:
+                st.markdown("#### Live doorrekening per voorgestelde route:")
+                calc_df = pd.DataFrame({
+                    "Route": df_matrix["Voorgestelde Route"],
+                    "1. Vraag (45%)": df_matrix["_vraag_sc"].apply(lambda x: f"{x:.1f} pt (×0,45 = {0.45*x:.1f})"),
+                    "2. Transfer (35%)": df_matrix["_transfer_sc"].apply(lambda x: f"{x:.1f} pt (×0,35 = {0.35*x:.1f})"),
+                    "3. Marktruimte (20%)": df_matrix["_marktruimte_sc"].apply(lambda x: f"{x:.1f} pt (×0,20 = {0.20*x:.1f})"),
+                    "Totaal Score": df_matrix["Potentie Score"].apply(lambda x: f"{x:.1f} / 100")
+                })
+                st.dataframe(calc_df, use_container_width=True, hide_index=True)
 
     if df_matrix.empty:
         st.warning("Geen voorgestelde routes gevonden in Tabblad 1 voor de huidige filterselectie.")
@@ -574,8 +603,9 @@ with tab_overview:
             fig_bubble.update_traces(textposition='top center')
             st.plotly_chart(style_fig(fig_bubble), use_container_width=True)
 
+        hidden_cols = ["IATA", "_vraag_sc", "_transfer_sc", "_marktruimte_sc", "_max_prob"]
         st.dataframe(
-            df_matrix.drop(columns=["IATA"]),
+            df_matrix.drop(columns=[c for c in hidden_cols if c in df_matrix.columns]),
             use_container_width=True,
             hide_index=True,
             column_config={
@@ -594,12 +624,24 @@ with tab_single:
     if not active_proposals:
         st.warning("Geen routes beschikbaar in Tabblad 1.")
     else:
-        col_sel, _ = st.columns([1.2, 1.8])
+        col_sel, col_btn_dd = st.columns([1.8, 1.0])
         with col_sel:
             chosen_label = st.selectbox("🎯 Selecteer één route uit Tabblad 1:", [p["label"] for p in active_proposals])
         
         chosen_prop = next(p for p in active_proposals if p["label"] == chosen_label)
         row_dest = df_matrix[df_matrix["IATA"] == chosen_prop["iata"]].iloc[0]
+
+        with col_btn_dd:
+            st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
+            with st.popover(f"📐 Score-opbouw {chosen_prop['iata']}", use_container_width=True):
+                st.markdown(f"### Score-opbouw: {chosen_label}")
+                st.latex(r"	ext{Score} = (0{,}45 	imes V) + (0{,}35 	imes T) + (0{,}20 	imes M)")
+                st.markdown(f"""
+                - **Vraagscore ($V$):** `{row_dest['_vraag_sc']:.1f}` pt $\times 0{{,}}45 =$ **{0.45 * row_dest['_vraag_sc']:.1f} pt** ({int(row_dest['Catchment / Leakage PAX']):,} PAX)
+                - **Transfer Potentieel ($T$):** `{row_dest['_transfer_sc']:.1f}` pt $\times 0{{,}}35 =$ **{0.35 * row_dest['_transfer_sc']:.1f} pt**
+                - **Marktruimte ($M$):** `{row_dest['_marktruimte_sc']:.1f}` pt $\times 0{{,}}20 =$ **{0.20 * row_dest['_marktruimte_sc']:.1f} pt** (max. concurrentie-aandeel: {row_dest['_max_prob']:.1f}%)
+                - **Totaal Potentie Score:** **{row_dest['Potentie Score']:.1f} / 100 pt**
+                """.replace(",", "."))
 
         if not df_conn_raw.empty and 'Airline' in df_conn_raw.columns and chosen_prop["airlines"]:
             s_conn = df_conn_raw[df_conn_raw['Airline'].astype(str).str.upper().isin(chosen_prop["airlines"])]
@@ -1002,7 +1044,7 @@ with tab5:
 st.markdown(
     '<div class="brand-footer">'
     '<span><strong>Groningen Airport Eelde (GRQ)</strong> — Route Development & Network Analytics</span>'
-    '<span><strong>Alpha Phase [Version 0.9.8]</strong></span>'
+    '<span><strong>Alpha Phase [Version 0.9.8.1]</strong></span>'
     '<span>Powered by <strong>JR Aviation Solutions</strong></span>'
     '</div>',
     unsafe_allow_html=True
