@@ -1,20 +1,3 @@
-Hier zijn de twee aanpassingen doorgevoerd:
-
-1. **Gecombineerde Beslismatrix uitsluitend gebaseerd op Tabblad 1 (`Proposal Investigation`):** De lijst met bestemmingen voor de matrix wordt nu uitsluitend opgebouwd uit het tabblad `Proposal Investigation`, zodat alleen jouw daadwerkelijk onderzochte routevoorstellen worden geëvalueerd en gescoord (zonder vervuiling door losse bestemmingen uit andere tabbladen).
-2. **Interactieve Europese Landkaart voor `Route Competitors`:**
-* Een **routekiezer** waarmee je per voorgestelde route ziet welke concurrerende luchthavens (zoals AMS, EIN, BRE, DUS, MST, RTM) en bestemmingen actief zijn.
-* Een **interactieve landkaart (`go.Scattergeo` op Europa)** waarop **Groningen Airport Eelde (GRQ)** in oranje wordt getoond samen met de **concurrerende luchthavens (en vlieglijnen)**, waarbij de grootte van de stip het aantal **PAX uit het GRQ-catchment** weergeeft.
-* Ingebouwde coördinatenbibliotheek voor Europese luchthavens en bestemmingen (plus automatische detectie als jouw Excel-tabblad zelf `Lat`/`Lon`-kolommen heeft).
-
-
-
----
-
-### Volledige bijgewerkte code voor `Route_Development_Dashboard.py`
-
-Kopieer onderstaande code en vervang de inhoud van `Route_Development_Dashboard.py` op GitHub:
-
-```python
 import streamlit as st
 import pandas as pd
 import plotly.express as px
