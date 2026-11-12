@@ -19,7 +19,7 @@ GRQ_SLATE = "#64748B"
 GRQ_TEAL = "#0D9488"
 GRQ_PALETTE = [GRQ_ORANGE, "#334155", GRQ_TEAL, GRQ_ORANGE_LIGHT, "#94A3B8", "#D95D13"]
 
-# Coördinaten-database voor luchthavens & Europese bestemmingen (voor de Route Competitors kaart)
+# Coördinaten-database voor luchthavens & Europese bestemmingen
 AIRPORT_COORDS = {
     # Catchment / Concurrerende luchthavens
     "GRQ": (53.1197, 6.5794, "Groningen Airport Eelde (GRQ)"),
@@ -37,12 +37,14 @@ AIRPORT_COORDS = {
     "BREMEN": (53.0475, 8.7867, "Bremen Airport (BRE)"),
     "FMO": (52.1346, 7.6848, "Münster Osnabrück (FMO)"),
     "DUS": (51.2895, 6.7668, "Düsseldorf Airport (DUS)"),
+    "CGN": (50.8659, 7.1427, "Köln Bonn Airport (CGN)"),
+    "DTM": (51.5183, 7.6122, "Dortmund Airport (DTM)"),
     "NRN": (51.6024, 6.1422, "Weeze Airport (NRN)"),
     "HAM": (53.6304, 9.9882, "Hamburg Airport (HAM)"),
     "HAJ": (52.4611, 9.6850, "Hannover Airport (HAJ)"),
     "BRU": (50.9010, 4.4856, "Brussels Airport (BRU)"),
     "CRL": (50.4592, 4.4538, "Brussels South Charleroi (CRL)"),
-    # Veelvoorkomende Europese bestemmingen
+    # Europese bestemmingen
     "STN": (51.8860, 0.2389, "London Stansted (STN)"),
     "SEN": (51.5714, 0.6956, "London Southend (SEN)"),
     "LHR": (51.4700, -0.4543, "London Heathrow (LHR)"),
@@ -62,10 +64,12 @@ AIRPORT_COORDS = {
     "FAO": (37.0144, -7.9659, "Faro (FAO)"),
     "FARO": (37.0144, -7.9659, "Faro (FAO)"),
     "LIS": (38.7756, -9.1354, "Lissabon (LIS)"),
-    "CPH": (55.6180, 12.6508, "Kopenhagen (CPH)"),
-    "COPENHAGEN": (55.6180, 12.6508, "Kopenhagen (CPH)"),
-    "KOPENHAGEN": (55.6180, 12.6508, "Kopenhagen (CPH)"),
+    "CPH": (55.6180, 12.6508, "Copenhagen (CPH)"),
+    "COPENHAGEN": (55.6180, 12.6508, "Copenhagen (CPH)"),
+    "KOPENHAGEN": (55.6180, 12.6508, "Copenhagen (CPH)"),
+    "AAL": (57.0928, 9.8492, "Aalborg (AAL)"),
     "OSL": (60.1976, 11.1004, "Oslo (OSL)"),
+    "BGO": (60.2934, 5.2181, "Bergen (BGO)"),
     "ARN": (59.6498, 17.9238, "Stockholm (ARN)"),
     "MUC": (48.3537, 11.7750, "München (MUC)"),
     "MUNICH": (48.3537, 11.7750, "München (MUC)"),
@@ -83,15 +87,20 @@ AIRPORT_COORDS = {
     "KRK": (50.0777, 19.7848, "Krakau (KRK)"),
     "SPU": (43.5389, 16.2980, "Split (SPU)"),
     "SPLIT": (43.5389, 16.2980, "Split (SPU)"),
+    "ZAD": (44.1083, 15.3467, "Zadar (ZAD)"),
+    "ZAG": (45.7429, 16.0688, "Zagreb (ZAG)"),
     "DBV": (42.5614, 18.2682, "Dubrovnik (DBV)"),
     "FCO": (41.8003, 12.2389, "Rome (FCO)"),
     "MXP": (45.6301, 8.7255, "Milaan (MXP)"),
     "CDG": (49.0097, 2.5479, "Parijs (CDG)"),
+    "BOD": (44.8283, -0.7156, "Bordeaux (BOD)"),
     "DUB": (53.4264, -6.2499, "Dublin (DUB)"),
     "EDI": (55.9508, -3.3615, "Edinburgh (EDI)"),
     "MAN": (53.3588, -2.2727, "Manchester (MAN)"),
+    "BRS": (51.3827, -2.7191, "Bristol (BRS)"),
     "ABZ": (57.2019, -2.1978, "Aberdeen (ABZ)"),
     "ACE": (28.9455, -13.6052, "Lanzarote (ACE)"),
+    "FUE": (28.4527, -13.8638, "Fuerteventura (FUE)"),
     "TFS": (28.0445, -16.5725, "Tenerife (TFS)"),
     "LPA": (27.9319, -15.3866, "Gran Canaria (LPA)"),
     "HER": (35.3397, 25.1803, "Heraklion (HER)"),
@@ -243,7 +252,33 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# 1. Excel Bestand Inladen
+# ==========================================
+# HULPFUNCTIES VOOR DATA & GETALNOTATIE
+# ==========================================
+def fix_eu_int(val):
+    """Corrigeert Europese duizendtallen die als float zijn ingelezen (bijv. 7.624 -> 7624, terwijl 345.000 -> 345)."""
+    if pd.isna(val):
+        return 0
+    try:
+        v = float(val)
+        if 0 < v < 1000 and round(v, 3) != int(v):
+            return int(round(v * 1000))
+        return int(round(v))
+    except Exception:
+        return 0
+
+def fix_eu_prob(val):
+    """Corrigeert Airport Choice percentages (bijv. 87633.000 -> 87.633%, 0.552 -> 0.552%)."""
+    if pd.isna(val):
+        return 0.0
+    try:
+        v = float(val)
+        if v > 100:
+            return v / 1000.0
+        return v
+    except Exception:
+        return 0.0
+
 @st.cache_data
 def load_all_sheets(file_source):
     try:
@@ -273,21 +308,21 @@ def find_col(df, candidates):
             return lower_map[c.lower()]
     return None
 
-def clean_route_name(val):
-    return str(val).replace("GRQ-", "").replace("GRQ - ", "").strip()
-
-def filter_df_multi(df, selected_list, col_candidates):
-    if df.empty or not selected_list:
+def filter_by_iata(df, iata_list, col_candidates):
+    """Filtert een dataframe op basis van IATA-codes (bijv. ['CPH', 'SPU'])."""
+    if df.empty or not iata_list:
         return df
     col = find_col(df, col_candidates)
     if not col:
         return df
-    patterns = [clean_route_name(item) for item in selected_list]
-    mask = df[col].astype(str).apply(lambda x: any(p.lower() in x.lower() for p in patterns))
+    codes = [c.upper().strip() for c in iata_list if c]
+    mask = df[col].astype(str).str.upper().apply(
+        lambda txt: any(re.search(rf'\b{re.escape(code)}\b', txt) or code in txt for code in codes)
+    )
     return df[mask]
 
 def resolve_coords(text):
-    """Zoekt luchthaven- of stadsenamen in een string (bijv. 'AMS-AGP' of 'Amsterdam') en geeft (lat, lon, label)."""
+    """Zoekt luchthaven- of stadsenamen op en retourneert (lat, lon, label)."""
     if not text:
         return None
     txt_upper = str(text).upper().strip()
@@ -312,40 +347,76 @@ all_data = load_all_sheets(uploaded_file)
 if not all_data:
     st.stop()
 
-df_prop_raw = all_data.get('Proposal Investigation', pd.DataFrame())
-df_choice_raw = all_data.get('Airport Choice', pd.DataFrame())
-df_comp_raw = all_data.get('Route Competitors', pd.DataFrame())
-df_leak_raw = all_data.get('Surface Leakage', pd.DataFrame())
-df_conn_raw = all_data.get('Weighted Connectivity', pd.DataFrame())
+first_sheet_name = 'Proposal Investigation' if 'Proposal Investigation' in all_data else list(all_data.keys())[0]
+df_prop_raw = all_data.get(first_sheet_name, pd.DataFrame()).copy()
+df_choice_raw = all_data.get('Airport Choice', pd.DataFrame()).copy()
+df_comp_raw = all_data.get('Route Competitors', pd.DataFrame()).copy()
+df_leak_raw = all_data.get('Surface Leakage', pd.DataFrame()).copy()
+df_conn_raw = all_data.get('Weighted Connectivity', pd.DataFrame()).copy()
+
+# Normaliseer numerieke kolommen uit MK-Metric export
+if not df_comp_raw.empty and 'PAX from catchment' in df_comp_raw.columns:
+    df_comp_raw['PAX_clean'] = df_comp_raw['PAX from catchment'].apply(fix_eu_int)
+    # Extraheer vertrekluchthaven uit Routing (bijv. 'AMS-CPH' -> 'AMS', 'BRE-AMS-CPH' -> 'BRE')
+    if 'Routing' in df_comp_raw.columns:
+        df_comp_raw['Origin_Airport'] = df_comp_raw['Routing'].astype(str).apply(
+            lambda x: re.split(r'[-–>/]', x.strip())[0].strip().upper()
+        )
+        df_comp_raw['Dest_Airport'] = df_comp_raw['Routing'].astype(str).apply(
+            lambda x: re.split(r'[-–>/]', x.strip())[-1].strip().upper()
+        )
+
+if not df_leak_raw.empty and 'Pax leakage' in df_leak_raw.columns:
+    df_leak_raw['Leakage_clean'] = df_leak_raw['Pax leakage'].apply(fix_eu_int)
+
+if not df_choice_raw.empty:
+    if 'Probability% Business' in df_choice_raw.columns:
+        df_choice_raw['Prob_Bus_clean'] = df_choice_raw['Probability% Business'].apply(fix_eu_prob)
+    if 'Probability% Non-Business' in df_choice_raw.columns:
+        df_choice_raw['Prob_NonBus_clean'] = df_choice_raw['Probability% Non-Business'].apply(fix_eu_prob)
 
 # ==========================================
-# UITSLUITEND BESTEMMINGEN UIT TABBLAD 1 (PROPOSAL INVESTIGATION)
+# UITSLUITEND VOORGESTELDE ROUTES UIT TABBLAD 1
 # ==========================================
-prop_destinations = []
-prop_col = find_col(df_prop_raw, ['Route', 'Destination', 'Routing'])
-if prop_col and not df_prop_raw.empty:
-    seen = set()
-    for val in df_prop_raw[prop_col].dropna().unique():
-        cleaned = clean_route_name(val)
-        if cleaned and cleaned not in seen:
-            seen.add(cleaned)
-            prop_destinations.append(cleaned)
+proposals = []
+arr_col = find_col(df_prop_raw, ['Arrival', 'Destination', 'Route', 'Routing'])
+city_col = find_col(df_prop_raw, ['City', 'Name', 'Destination Name'])
+acft_col = find_col(df_prop_raw, ['ACFT Propsal', 'ACFT Proposal', 'Aircraft', 'Fleet'])
+air_col = find_col(df_prop_raw, ['Airline ICAO Propsal', 'Airline ICAO Proposal', 'Airline'])
+
+if not df_prop_raw.empty and arr_col:
+    for _, r in df_prop_raw.iterrows():
+        iata = str(r[arr_col]).strip().upper()
+        if not iata or iata == 'NAN':
+            continue
+        city = str(r[city_col]).strip() if (city_col and pd.notna(r[city_col])) else ""
+        label = f"{iata} — {city}" if city else iata
+        pax_t = str(r['PAX Type']).strip() if ('PAX Type' in df_prop_raw.columns and pd.notna(r['PAX Type'])) else "Onbekend"
+        acft_s = str(r[acft_col]).strip() if (acft_col and pd.notna(r[acft_col])) else "E190 / B738"
+        air_s = str(r[air_col]).strip() if (air_col and pd.notna(r[air_col])) else ""
+        proposals.append({
+            "iata": iata,
+            "city": city,
+            "label": label,
+            "pax_type": pax_t,
+            "acft": acft_s,
+            "airlines": [a.strip().upper() for a in air_s.split(",") if a.strip()]
+        })
 
 # ==========================================
 # GLOBALE FILTERS IN DE ZIJBALK
 # ==========================================
 st.sidebar.markdown("### 🔍 Globale Filters")
 
-selected_dests = st.sidebar.multiselect(
+all_labels = [p["label"] for p in proposals]
+selected_labels = st.sidebar.multiselect(
     "Filter op Voorgestelde Route(s) (Tab 1)",
-    options=prop_destinations,
+    options=all_labels,
     default=[],
     placeholder="Alle routes uit Tab 1 tonen..."
 )
 
-pax_types = []
-if not df_prop_raw.empty and 'PAX Type' in df_prop_raw.columns:
-    pax_types = sorted(df_prop_raw['PAX Type'].dropna().unique().tolist())
+pax_types = sorted(list({p["pax_type"] for p in proposals})) if proposals else []
 selected_pax = st.sidebar.multiselect(
     "Filter op Segment (PAX Type)",
     options=pax_types,
@@ -353,62 +424,70 @@ selected_pax = st.sidebar.multiselect(
 ) if pax_types else []
 
 min_leakage = 0
-if not df_leak_raw.empty and 'Pax leakage' in df_leak_raw.columns:
-    max_l = int(pd.to_numeric(df_leak_raw['Pax leakage'], errors='coerce').max() or 0)
+if not df_leak_raw.empty and 'Leakage_clean' in df_leak_raw.columns:
+    max_l = int(df_leak_raw['Leakage_clean'].max() or 0)
     if max_l > 0:
         min_leakage = st.sidebar.slider("Min. Surface Leakage (PAX)", 0, max_l, 0, step=max(1, max_l // 20))
 
-# Filter Tabblad 1 en bepaal actieve lijst van bestemmingen uit Tabblad 1
-df_prop = filter_df_multi(df_prop_raw, selected_dests, ['Route', 'Destination', 'Routing'])
-if selected_pax and not df_prop.empty and 'PAX Type' in df_prop.columns:
-    df_prop = df_prop[df_prop['PAX Type'].isin(selected_pax)]
+# Actieve voorstellen uit Tabblad 1 op basis van filters
+active_proposals = [
+    p for p in proposals
+    if (not selected_labels or p["label"] in selected_labels)
+    and (not selected_pax or p["pax_type"] in selected_pax)
+]
+active_iatas = [p["iata"] for p in active_proposals]
 
-active_tab1_dests = []
-if prop_col and not df_prop.empty:
-    seen_active = set()
-    for val in df_prop[prop_col].dropna().unique():
-        cleaned = clean_route_name(val)
-        if cleaned and cleaned not in seen_active:
-            seen_active.add(cleaned)
-            active_tab1_dests.append(cleaned)
+df_prop = df_prop_raw[df_prop_raw[arr_col].astype(str).str.upper().isin(active_iatas)] if (not df_prop_raw.empty and arr_col and active_iatas) else df_prop_raw.iloc[0:0]
+filter_iatas = active_iatas if selected_labels or (len(selected_pax) < len(pax_types)) else []
 
-# Filter overige tabbladen op basis van geselecteerde routes
-filter_target = selected_dests if selected_dests else []
-df_choice = filter_df_multi(df_choice_raw, filter_target, ['Route', 'Destination'])
-df_comp = filter_df_multi(df_comp_raw, filter_target, ['Routing', 'Route', 'Destination'])
-df_leak = filter_df_multi(df_leak_raw, filter_target, ['Destination', 'Route'])
-if min_leakage > 0 and not df_leak.empty and 'Pax leakage' in df_leak.columns:
-    df_leak = df_leak[pd.to_numeric(df_leak['Pax leakage'], errors='coerce') >= min_leakage]
-df_conn = filter_df_multi(df_conn_raw, filter_target, ['Destination', 'Route', 'Routing', 'Hub', 'Airline'])
+df_choice = filter_by_iata(df_choice_raw, filter_iatas, ['Route', 'Destination'])
+df_comp = filter_by_iata(df_comp_raw, filter_iatas, ['Routing', 'Route', 'Destination'])
+df_leak = filter_by_iata(df_leak_raw, filter_iatas, ['Destination', 'Route'])
+if min_leakage > 0 and not df_leak.empty and 'Leakage_clean' in df_leak.columns:
+    df_leak = df_leak[df_leak['Leakage_clean'] >= min_leakage]
 
 # ==========================================
-# BEREKEN GECOMBINEERDE BESLISMATRIX (ALLEEN TABBLAD 1 BESTEMMINGEN)
+# BEREKEN GECOMBINEERDE BESLISMATRIX (ALLEEN TABBLAD 1)
 # ==========================================
-def build_route_summary(dest_list):
-    max_leak = pd.to_numeric(df_leak_raw['Pax leakage'], errors='coerce').max() if ('Pax leakage' in df_leak_raw.columns and not df_leak_raw.empty) else 1
+def build_route_summary(prop_list):
+    if not prop_list:
+        return pd.DataFrame()
+
+    # Bepaal referentie-maximum voor schaling van vraag (Surface Leakage of Catchment PAX)
+    all_cat_pax = []
+    for p in proposals:
+        sc = filter_by_iata(df_comp_raw, [p["iata"]], ['Routing', 'Route', 'Destination'])
+        all_cat_pax.append(sc['PAX_clean'].sum() if ('PAX_clean' in sc.columns and not sc.empty) else 0)
+    max_demand_ref = max(all_cat_pax + [1])
+
     rows = []
-    for dest in dest_list:
-        s_prop = filter_df_multi(df_prop_raw, [dest], ['Route', 'Destination', 'Routing'])
-        s_choice = filter_df_multi(df_choice_raw, [dest], ['Route', 'Destination'])
-        s_comp = filter_df_multi(df_comp_raw, [dest], ['Routing', 'Route', 'Destination'])
-        s_leak = filter_df_multi(df_leak_raw, [dest], ['Destination', 'Route'])
-        s_conn = filter_df_multi(df_conn_raw, [dest], ['Destination', 'Route', 'Routing', 'Hub', 'Airline'])
+    for p in prop_list:
+        iata = p["iata"]
+        s_choice = filter_by_iata(df_choice_raw, [iata], ['Route', 'Destination'])
+        s_comp = filter_by_iata(df_comp_raw, [iata], ['Routing', 'Route', 'Destination'])
+        s_leak = filter_by_iata(df_leak_raw, [iata], ['Destination', 'Route'])
 
-        leak_v = pd.to_numeric(s_leak['Pax leakage'], errors='coerce').sum() if ('Pax leakage' in s_leak.columns and not s_leak.empty) else 0
-        leak_sc = min((leak_v / max_leak) * 100, 100) if max_leak > 0 else 0
+        # Koppel Weighted Connectivity via de voorgestelde Airlines uit Tab 1 (bijv. SAS voor CPH, TRA/CTN voor SPU)
+        if not df_conn_raw.empty and 'Airline' in df_conn_raw.columns and p["airlines"]:
+            s_conn = df_conn_raw[df_conn_raw['Airline'].astype(str).str.upper().isin(p["airlines"])]
+            if s_conn.empty:
+                s_conn = df_conn_raw
+        else:
+            s_conn = df_conn_raw
 
-        p_bus = pd.to_numeric(s_choice['Probability% Business'], errors='coerce').mean() if ('Probability% Business' in s_choice.columns and not s_choice.empty) else 0
-        p_non = pd.to_numeric(s_choice['Probability% Non-Business'], errors='coerce').mean() if ('Probability% Non-Business' in s_choice.columns and not s_choice.empty) else 0
-        if 0 < p_bus <= 1: p_bus *= 100
-        if 0 < p_non <= 1: p_non *= 100
-        best_prob = max(p_bus, p_non)
+        leak_v = int(s_leak['Leakage_clean'].sum()) if ('Leakage_clean' in s_leak.columns and not s_leak.empty) else 0
+        catch_pax_v = int(s_comp['PAX_clean'].sum()) if ('PAX_clean' in s_comp.columns and not s_comp.empty) else 0
+        demand_v = leak_v if leak_v > 0 else catch_pax_v
+        demand_sc = min((demand_v / max_demand_ref) * 100, 100) if max_demand_ref > 0 else 0
+
+        # Hoogste keuzeaandeel (directe concurrent vs GRQ potentieel)
+        p_bus = float(s_choice['Prob_Bus_clean'].max()) if ('Prob_Bus_clean' in s_choice.columns and not s_choice.empty) else 0.0
+        p_non = float(s_choice['Prob_NonBus_clean'].max()) if ('Prob_NonBus_clean' in s_choice.columns and not s_choice.empty) else 0.0
+        # Hoe lager de dominantie van Schiphol (100 - max_share), hoe meer overstappotentieel naar GRQ
+        alt_capture_sc = max(0.0, 100.0 - (p_bus if p["pax_type"] == "Business" else p_non))
 
         c_days = s_conn[s_conn['Day outbound'] != 'AverageDay'] if ('Day outbound' in s_conn.columns and not s_conn.empty) else s_conn
-        if c_days.empty and not df_conn_raw.empty:
-            c_days = df_conn_raw[df_conn_raw['Day outbound'] != 'AverageDay'] if 'Day outbound' in df_conn_raw.columns else df_conn_raw
-        
-        avg_tr = pd.to_numeric(c_days['Transfer Potential'], errors='coerce').mean() if ('Transfer Potential' in c_days.columns and not c_days.empty) else 0
-        if 0 < avg_tr <= 1: avg_tr *= 100
+        avg_tr = float(pd.to_numeric(c_days['Transfer Potential'], errors='coerce').mean()) if ('Transfer Potential' in c_days.columns and not c_days.empty) else 0.0
 
         best_day = "-"
         if not c_days.empty and {'Day outbound', 'Transfer Potential'}.issubset(c_days.columns):
@@ -416,24 +495,26 @@ def build_route_summary(dest_list):
             if not d_grp.empty:
                 best_day = str(d_grp.iloc[0]['Day outbound'])
 
-        c_freq = pd.to_numeric(s_comp['Frequency per Week'], errors='coerce').sum() if ('Frequency per Week' in s_comp.columns and not s_comp.empty) else 0
-        pax_seg = str(s_prop['PAX Type'].iloc[0]) if ('PAX Type' in s_prop.columns and not s_prop.empty) else ("Business" if p_bus > p_non else "Non-Business")
+        c_freq = int(pd.to_numeric(s_comp['Frequency per Week'], errors='coerce').sum()) if ('Frequency per Week' in s_comp.columns and not s_comp.empty) else 0
 
-        score = round((0.40 * leak_sc) + (0.35 * min(best_prob, 100)) + (0.25 * min(avg_tr, 100)), 1)
+        # Gewogen score: 45% Catchment/Leakage Vraag, 35% Transfer & Netwerk Connectivity, 20% Marktruimte (niet-AMS)
+        score = round((0.45 * demand_sc) + (0.35 * min(avg_tr, 100)) + (0.20 * min(alt_capture_sc * 2.5, 100)), 1)
+
         rows.append({
-            "Voorgestelde Route (Tab 1)": dest,
+            "Voorgestelde Route (Tab 1)": p["label"],
+            "IATA": iata,
             "Potentie Score": score,
-            "Segment": pax_seg,
-            "Surface Leakage": int(leak_v),
-            "Business Kans %": round(p_bus, 1),
-            "Leisure Kans %": round(p_non, 1),
+            "Segment": p["pax_type"],
+            "Catchment / Leakage PAX": demand_v,
             "Transfer Potentieel %": round(avg_tr, 1),
-            "Concurrentie (vl/wk)": int(c_freq),
-            "Beste Vliegdag": best_day
+            "Concurrentie (vl/wk)": c_freq,
+            "Beste Vliegdag": best_day,
+            "Voorgestelde Vloot": p["acft"],
+            "Voorgestelde Airline": ", ".join(p["airlines"]) if p["airlines"] else "-"
         })
-    return pd.DataFrame(rows).sort_values(by="Potentie Score", ascending=False) if rows else pd.DataFrame()
+    return pd.DataFrame(rows).sort_values(by="Potentie Score", ascending=False)
 
-df_matrix = build_route_summary(active_tab1_dests)
+df_matrix = build_route_summary(active_proposals)
 
 # ==========================================
 # TABS STRUCTUUR
@@ -455,14 +536,14 @@ with tab_overview:
     st.subheader("📊 Gecombineerde Beslismatrix (Uitsluitend Routes uit Tabblad 1)")
 
     if df_matrix.empty:
-        st.warning("Geen voorgestelde routes gevonden in Tabblad 1 ('Proposal Investigation') voor deze filterselectie.")
+        st.warning("Geen voorgestelde routes gevonden in Tabblad 1 voor de huidige filterselectie.")
     else:
         top_route = df_matrix.iloc[0]
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("🥇 Hoogst Scorende Voorstel", top_route["Voorgestelde Route (Tab 1)"], f"{top_route['Potentie Score']} / 100 pt")
-        m2.metric("💧 Totale Surface Leakage", f"{df_matrix['Surface Leakage'].sum():,}".replace(",", "."))
-        m3.metric("📈 Gem. GRQ Keuzekans", f"{df_matrix[['Business Kans %', 'Leisure Kans %']].max(axis=1).mean():.1f}%")
-        m4.metric("✈️ Routes uit Tabblad 1", len(df_matrix))
+        m2.metric("💧 Catchment / Leakage PAX", f"{df_matrix['Catchment / Leakage PAX'].sum():,}".replace(",", "."))
+        m3.metric("🔗 Gem. Transfer Potentieel", f"{df_matrix['Transfer Potentieel %'].mean():.1f}%")
+        m4.metric("✈️ Voorgestelde Routes (Tab 1)", len(df_matrix))
 
         g1, g2 = st.columns(2)
         with g1:
@@ -473,7 +554,7 @@ with tab_overview:
                 orientation="h",
                 color="Segment",
                 text_auto=True,
-                color_discrete_sequence=[GRQ_ORANGE, GRQ_SLATE, GRQ_TEAL],
+                color_discrete_sequence=[GRQ_ORANGE, GRQ_TEAL, GRQ_SLATE],
                 title="Ranking Voorgestelde Routes (Tab 1) op Potentie Score"
             )
             fig_rank.update_layout(yaxis={'categoryorder': 'total ascending'})
@@ -482,29 +563,27 @@ with tab_overview:
         with g2:
             fig_bubble = px.scatter(
                 df_matrix,
-                x="Surface Leakage",
-                y="Business Kans %" if df_matrix["Business Kans %"].sum() > df_matrix["Leisure Kans %"].sum() else "Leisure Kans %",
+                x="Catchment / Leakage PAX",
+                y="Transfer Potentieel %",
                 size="Potentie Score",
                 color="Segment",
                 text="Voorgestelde Route (Tab 1)",
                 color_discrete_sequence=[GRQ_ORANGE, GRQ_TEAL, GRQ_SLATE],
-                title="Vraag (Leakage) vs. GRQ Voorkeur (Bubbel = Score)"
+                title="Vraag (PAX) vs. Transfer Connectivity (Bubbel = Score)"
             )
             fig_bubble.update_traces(textposition='top center')
             st.plotly_chart(style_fig(fig_bubble), use_container_width=True)
 
         st.dataframe(
-            df_matrix,
+            df_matrix.drop(columns=["IATA"]),
             use_container_width=True,
             hide_index=True,
             column_config={
                 "Potentie Score": st.column_config.ProgressColumn(
                     "Potentie Score", format="%.1f", min_value=0, max_value=100
                 ),
-                "Surface Leakage": st.column_config.NumberColumn("Surface Leakage (PAX)", format="%d"),
-                "Business Kans %": st.column_config.NumberColumn("Business %", format="%.1f%%"),
-                "Leisure Kans %": st.column_config.NumberColumn("Leisure %", format="%.1f%%"),
-                "Transfer Potentieel %": st.column_config.NumberColumn("Transfer %", format="%.1f%%"),
+                "Catchment / Leakage PAX": st.column_config.NumberColumn("Catchment / Leakage PAX", format="%d"),
+                "Transfer Potentieel %": st.column_config.NumberColumn("Transfer Potentieel %", format="%.1f%%"),
             }
         )
 
@@ -512,22 +591,27 @@ with tab_overview:
 # TAB 1: LOSSE BESTEMMING DEEP-DIVE
 # ==========================================
 with tab_single:
-    if not active_tab1_dests:
+    if not active_proposals:
         st.warning("Geen routes beschikbaar in Tabblad 1.")
     else:
-        col_sel, _ = st.columns([1, 2])
+        col_sel, _ = st.columns([1.2, 1.8])
         with col_sel:
-            chosen_dest = st.selectbox("🎯 Selecteer één route uit Tabblad 1:", active_tab1_dests)
+            chosen_label = st.selectbox("🎯 Selecteer één route uit Tabblad 1:", [p["label"] for p in active_proposals])
         
-        row_dest = df_matrix[df_matrix["Voorgestelde Route (Tab 1)"] == chosen_dest].iloc[0]
-        s_conn = filter_df_multi(df_conn_raw, [chosen_dest], ['Destination', 'Route', 'Routing', 'Hub', 'Airline'])
-        if s_conn.empty:
+        chosen_prop = next(p for p in active_proposals if p["label"] == chosen_label)
+        row_dest = df_matrix[df_matrix["IATA"] == chosen_prop["iata"]].iloc[0]
+
+        if not df_conn_raw.empty and 'Airline' in df_conn_raw.columns and chosen_prop["airlines"]:
+            s_conn = df_conn_raw[df_conn_raw['Airline'].astype(str).str.upper().isin(chosen_prop["airlines"])]
+            if s_conn.empty:
+                s_conn = df_conn_raw
+        else:
             s_conn = df_conn_raw
 
         k1, k2, k3, k4 = st.columns(4)
         k1.metric("🏆 Potentie Score", f"{row_dest['Potentie Score']} / 100")
-        k2.metric("💧 Terugwinbare PAX", f"{row_dest['Surface Leakage']:,}".replace(",", "."))
-        k3.metric("🧭 Hoogste Keuzekans", f"{max(row_dest['Business Kans %'], row_dest['Leisure Kans %']):.1f}%")
+        k2.metric("💧 Catchment / Leakage PAX", f"{row_dest['Catchment / Leakage PAX']:,}".replace(",", "."))
+        k3.metric("🔗 Transfer Potentieel", f"{row_dest['Transfer Potentieel %']:.1f}%")
         k4.metric("🥊 Concurrentie", f"{row_dest['Concurrentie (vl/wk)']} vl/wk")
 
         c_sig1, c_sig2, c_sig3, c_sig4 = st.columns(4)
@@ -536,23 +620,20 @@ with tab_single:
         with c_sig2:
             st.markdown(f'<div class="signal-card"><div class="signal-label">Optimale Vliegdag</div><div class="signal-value">{row_dest["Beste Vliegdag"]}</div></div>', unsafe_allow_html=True)
         with c_sig3:
-            adv_days = "Ma / Do / Vr" if "Business" in row_dest["Segment"] and "Non" not in row_dest["Segment"] else "Vr / Za / Zo"
-            st.markdown(f'<div class="signal-card"><div class="signal-label">Aanbevolen Rotatie</div><div class="signal-value">{adv_days}</div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="signal-card"><div class="signal-label">Voorgestelde Airline</div><div class="signal-value">{row_dest["Voorgestelde Airline"]}</div></div>', unsafe_allow_html=True)
         with c_sig4:
-            fleet_col = find_col(s_conn, ['Fleet', 'Aircraft', 'Aircraft Type', 'Equipment'])
-            rec_fleet = str(s_conn[fleet_col].mode()[0]) if (fleet_col and not s_conn.empty) else "E190 / B737-800"
-            st.markdown(f'<div class="signal-card"><div class="signal-label">Geschikte Vloot</div><div class="signal-value">{rec_fleet}</div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="signal-card"><div class="signal-label">Voorgestelde Vloot (Tab 1)</div><div class="signal-value">{row_dest["Voorgestelde Vloot"]}</div></div>', unsafe_allow_html=True)
 
         v1, v2 = st.columns(2)
         with v1:
-            max_l_val = pd.to_numeric(df_leak_raw['Pax leakage'], errors='coerce').max() if ('Pax leakage' in df_leak_raw.columns and not df_leak_raw.empty) else 1
-            l_norm = min((row_dest['Surface Leakage'] / max_l_val) * 100, 100) if max_l_val > 0 else 0
-            c_norm = max(row_dest['Business Kans %'], row_dest['Leisure Kans %'])
+            max_p = max(df_matrix['Catchment / Leakage PAX'].max(), 1)
+            d_norm = min((row_dest['Catchment / Leakage PAX'] / max_p) * 100, 100)
             t_norm = row_dest['Transfer Potentieel %']
+            c_space = max(15.0, min(100.0, 100.0 - (row_dest['Concurrentie (vl/wk)'] / 6.0)))
 
             fig_radar = go.Figure(data=go.Scatterpolar(
-                r=[l_norm, c_norm, t_norm, max(0, 100 - row_dest['Concurrentie (vl/wk)'] * 10), l_norm],
-                theta=['Vraag (Leakage)', 'GRQ Voorkeur', 'Transfer Netwerk', 'Marktruimte', 'Vraag (Leakage)'],
+                r=[d_norm, t_norm, c_space, row_dest['Potentie Score'], d_norm],
+                theta=['Catchment Vraag', 'Transfer Connectivity', 'Marktruimte', 'Totaalscore', 'Catchment Vraag'],
                 fill='toself',
                 line_color=GRQ_ORANGE,
                 fillcolor='rgba(243, 112, 33, 0.25)'
@@ -560,15 +641,14 @@ with tab_single:
             fig_radar.update_layout(
                 polar=dict(radialaxis=dict(visible=True, range=[0, 100], gridcolor="rgba(128,128,128,0.25)")),
                 showlegend=False,
-                title=f"Route Profiel: {chosen_dest}"
+                title=f"Route Profiel: {chosen_label}"
             )
             st.plotly_chart(style_fig(fig_radar), use_container_width=True)
 
         with v2:
             c_days = s_conn[s_conn['Day outbound'] != 'AverageDay'] if 'Day outbound' in s_conn.columns else s_conn
             if not c_days.empty and {'Day outbound', 'Transfer Potential'}.issubset(c_days.columns):
-                day_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
-                             'Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag', 'Zondag']
+                day_order = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
                 fig_d = px.bar(
                     c_days,
                     x='Day outbound',
@@ -577,7 +657,7 @@ with tab_single:
                     barmode='group',
                     category_orders={'Day outbound': day_order},
                     color_discrete_sequence=GRQ_PALETTE,
-                    title=f"Beste Vliegdagen op basis van Connectiviteit ({chosen_dest})"
+                    title=f"Beste Vliegdagen op basis van Connectiviteit ({chosen_label})"
                 )
                 st.plotly_chart(style_fig(fig_d), use_container_width=True)
             else:
@@ -590,7 +670,7 @@ with tab1:
     st.subheader("📍 Voorgestelde Routes (Proposal Investigation)")
     if not df_prop.empty:
         c1, c2, c3 = st.columns(3)
-        c1.metric("Gefilterde Routes", len(df_prop))
+        c1.metric("Voorgestelde Routes", len(df_prop))
         if 'PAX Type' in df_prop.columns:
             c2.metric("Business Routes", len(df_prop[df_prop['PAX Type'] == 'Business']))
             c3.metric("Non-Business / Leisure", len(df_prop[df_prop['PAX Type'] == 'Non-Business']))
@@ -602,24 +682,31 @@ with tab1:
 # TAB 3: AIRPORT CHOICE ANALYSIS
 # ==========================================
 with tab2:
-    st.subheader("🧭 Luchthaven Keuzekans (GRQ vs. Alternatieven)")
+    st.subheader("🧭 Luchthaven Keuzekans (Marktverdeling Alternatieven)")
     if not df_choice.empty:
         col_l, col_r = st.columns(2)
         with col_l:
-            if {'Route', 'Probability% Business', 'Trip Purpose'}.issubset(df_choice.columns):
+            if {'Route', 'Prob_Bus_clean', 'Trip Purpose'}.issubset(df_choice.columns):
                 fig_bus = px.bar(
-                    df_choice, x='Route', y='Probability% Business', color='Trip Purpose',
-                    color_discrete_sequence=[GRQ_ORANGE, GRQ_SLATE], title="Business Keuzekans %"
+                    df_choice, x='Route', y='Prob_Bus_clean', color='Trip Purpose',
+                    color_discrete_sequence=[GRQ_ORANGE, GRQ_SLATE], title="Business Keuzekans %",
+                    labels={'Prob_Bus_clean': 'Business Keuzekans (%)'}
                 )
                 st.plotly_chart(style_fig(fig_bus), use_container_width=True)
         with col_r:
-            if {'Route', 'Probability% Non-Business', 'Trip Purpose'}.issubset(df_choice.columns):
+            if {'Route', 'Prob_NonBus_clean', 'Trip Purpose'}.issubset(df_choice.columns):
                 fig_nonbus = px.bar(
-                    df_choice, x='Route', y='Probability% Non-Business', color='Trip Purpose',
-                    color_discrete_sequence=[GRQ_ORANGE_LIGHT, GRQ_TEAL], title="Non-Business Keuzekans %"
+                    df_choice, x='Route', y='Prob_NonBus_clean', color='Trip Purpose',
+                    color_discrete_sequence=[GRQ_ORANGE_LIGHT, GRQ_TEAL], title="Non-Business Keuzekans %",
+                    labels={'Prob_NonBus_clean': 'Non-Business Keuzekans (%)'}
                 )
                 st.plotly_chart(style_fig(fig_nonbus), use_container_width=True)
-        st.dataframe(df_choice, use_container_width=True, hide_index=True)
+        disp_choice = df_choice.copy()
+        if 'Prob_Bus_clean' in disp_choice.columns:
+            disp_choice['Probability% Business'] = disp_choice['Prob_Bus_clean'].round(2)
+        if 'Prob_NonBus_clean' in disp_choice.columns:
+            disp_choice['Probability% Non-Business'] = disp_choice['Prob_NonBus_clean'].round(2)
+        st.dataframe(disp_choice.drop(columns=[c for c in ['Prob_Bus_clean', 'Prob_NonBus_clean'] if c in disp_choice.columns]), use_container_width=True, hide_index=True)
     else:
         st.info("Geen data beschikbaar voor deze filterselectie.")
 
@@ -634,19 +721,21 @@ with tab3:
     else:
         f_col1, f_col2, f_col3 = st.columns([1.3, 1.5, 1.0])
         with f_col1:
-            comp_route_options = ["Alle routes uit Tabblad 1"] + prop_destinations
+            comp_route_options = ["Alle routes uit Tabblad 1"] + [p["label"] for p in proposals]
             sel_comp_route = st.selectbox("Selecteer mogelijke route (Tab 1):", comp_route_options)
         
         if sel_comp_route != "Alle routes uit Tabblad 1":
-            df_comp_view = filter_df_multi(df_comp_raw, [sel_comp_route], ['Routing', 'Route', 'Destination'])
+            sel_iata = sel_comp_route.split("—")[0].strip()
+            df_comp_view = filter_by_iata(df_comp_raw, [sel_iata], ['Routing', 'Route', 'Destination'])
         else:
-            df_comp_view = df_comp.copy()
+            sel_iata = None
+            df_comp_view = filter_by_iata(df_comp_raw, active_iatas, ['Routing', 'Route', 'Destination']) if active_iatas else df_comp_raw.copy()
 
         with f_col2:
-            if 'Catchment' in df_comp_view.columns and not df_comp_view.empty:
-                catchments = sorted(df_comp_view['Catchment'].dropna().unique().tolist())
-                sel_catch = st.multiselect("Filter op Concurrerende Luchthaven / Catchment:", catchments, default=catchments)
-                df_comp_view = df_comp_view[df_comp_view['Catchment'].isin(sel_catch)]
+            if 'Origin_Airport' in df_comp_view.columns and not df_comp_view.empty:
+                comp_airports = sorted([a for a in df_comp_view['Origin_Airport'].dropna().unique().tolist() if a != "GRQ"])
+                sel_origins = st.multiselect("Filter op Concurrerende Vertrekluchthaven:", comp_airports, default=comp_airports)
+                df_comp_view = df_comp_view[df_comp_view['Origin_Airport'].isin(sel_origins)]
 
         with f_col3:
             map_size_choice = st.selectbox("Kaartgrootte:", ["Normaal (580px)", "Groot (780px)", "Extra Groot (980px)"], index=1)
@@ -656,40 +745,12 @@ with tab3:
             st.warning("Geen concurrerende vluchten gevonden voor deze route-selectie.")
         else:
             ck1, ck2, ck3 = st.columns(3)
-            tot_c_freq = pd.to_numeric(df_comp_view['Frequency per Week'], errors='coerce').sum() if 'Frequency per Week' in df_comp_view.columns else 0
-            tot_c_pax = pd.to_numeric(df_comp_view['PAX from catchment'], errors='coerce').sum() if 'PAX from catchment' in df_comp_view.columns else 0
-            n_comp_airports = df_comp_view['Catchment'].nunique() if 'Catchment' in df_comp_view.columns else len(df_comp_view)
+            tot_c_freq = int(pd.to_numeric(df_comp_view['Frequency per Week'], errors='coerce').sum()) if 'Frequency per Week' in df_comp_view.columns else 0
+            tot_c_pax = int(df_comp_view['PAX_clean'].sum()) if 'PAX_clean' in df_comp_view.columns else 0
+            n_comp_airports = df_comp_view['Origin_Airport'].nunique() if 'Origin_Airport' in df_comp_view.columns else len(df_comp_view)
             ck1.metric("Concurrerende Luchthavens", n_comp_airports)
-            ck2.metric("Totale Concurrentie Freq/wk", f"{int(tot_c_freq)} vl/wk")
-            ck3.metric("Weglekkende PAX uit Catchment", f"{int(tot_c_pax):,}".replace(",", "."))
-
-            def parse_comp_pair(row_obj, fallback_dest_str):
-                routing_s = str(row_obj.get('Routing', '')).strip()
-                catch_s = str(row_obj.get('Catchment', '')).strip()
-                dest_s = str(row_obj.get('Destination', '')).strip()
-
-                origin_c = None
-                dest_c = None
-
-                parts = re.split(r'\s*[-–>/]\s*', routing_s)
-                if len(parts) >= 2:
-                    origin_c = resolve_coords(parts[0])
-                    dest_c = resolve_coords(parts[-1])
-
-                if not origin_c and catch_s:
-                    c_try = resolve_coords(catch_s)
-                    if c_try and c_try[2] != AIRPORT_COORDS["GRQ"][2]:
-                        origin_c = c_try
-
-                if not dest_c:
-                    if dest_s:
-                        dest_c = resolve_coords(dest_s)
-                    if not dest_c and fallback_dest_str != "Alle routes uit Tabblad 1":
-                        dest_c = resolve_coords(fallback_dest_str)
-                    if not dest_c and routing_s:
-                        dest_c = resolve_coords(routing_s)
-
-                return origin_c, dest_c
+            ck2.metric("Totale Concurrentie Freq/wk", f"{tot_c_freq} vl/wk")
+            ck3.metric("Weglekkende PAX uit Catchment", f"{tot_c_pax:,}".replace(",", "."))
 
             grq_lat, grq_lon, grq_name = AIRPORT_COORDS["GRQ"]
             comp_origins = {}
@@ -697,19 +758,22 @@ with tab3:
             route_lines = []
 
             for _, row in df_comp_view.iterrows():
-                pax_val = float(pd.to_numeric(row.get('PAX from catchment', 0), errors='coerce') or 0)
+                pax_val = float(row.get('PAX_clean', 0) or 0)
                 freq_val = int(pd.to_numeric(row.get('Frequency per Week', 0), errors='coerce') or 0)
                 routing_str = str(row.get('Routing', ''))
                 catch_str = str(row.get('Catchment', ''))
 
-                orig_c, dest_c = parse_comp_pair(row, sel_comp_route)
+                parts = re.split(r'\s*[-–>/]\s*', routing_str.strip())
+                orig_c = resolve_coords(parts[0]) if len(parts) >= 1 else None
+                dest_c = resolve_coords(parts[-1]) if len(parts) >= 2 else (resolve_coords(sel_iata) if sel_iata else None)
+
                 info_line = f"{routing_str} ({catch_str}) | {freq_val} vl/wk | {int(pax_val):,} PAX".replace(",", ".")
 
-                if orig_c:
+                if orig_c and orig_c[2] != grq_name:
                     o_lat, o_lon, o_name = orig_c
                     if o_name not in comp_origins:
                         comp_origins[o_name] = {"Naam": o_name, "lat": o_lat, "lon": o_lon, "PAX": 0.0, "Freq": 0, "Infos": []}
-                    comp_origins[o_name]["PAX"] += max(pax_val, 500.0)
+                    comp_origins[o_name]["PAX"] += max(pax_val, 5.0)
                     comp_origins[o_name]["Freq"] += freq_val
                     if info_line not in comp_origins[o_name]["Infos"]:
                         comp_origins[o_name]["Infos"].append(info_line)
@@ -718,44 +782,44 @@ with tab3:
                     d_lat, d_lon, d_name = dest_c
                     if d_name not in target_dests:
                         target_dests[d_name] = {"Naam": d_name, "lat": d_lat, "lon": d_lon, "PAX": 0.0, "Infos": []}
-                    target_dests[d_name]["PAX"] += max(pax_val, 500.0)
+                    target_dests[d_name]["PAX"] += max(pax_val, 5.0)
                     if info_line not in target_dests[d_name]["Infos"]:
                         target_dests[d_name]["Infos"].append(info_line)
 
-                # Lijn van Concurrerende Luchthaven -> Mogelijke Bestemming
-                if orig_c and dest_c and (orig_c[2] != dest_c[2]):
+                # Teken lijn van Concurrerende Luchthaven -> Mogelijke Bestemming
+                if orig_c and dest_c and (orig_c[2] != grq_name) and (orig_c[2] != dest_c[2]):
                     route_lines.append({
                         "o_lat": orig_c[0], "o_lon": orig_c[1],
                         "d_lat": dest_c[0], "d_lon": dest_c[1],
                         "label": info_line
                     })
 
-            if sel_comp_route != "Alle routes uit Tabblad 1" and not target_dests:
-                sel_c = resolve_coords(sel_comp_route)
+            if sel_iata and not target_dests:
+                sel_c = resolve_coords(sel_iata)
                 if sel_c:
                     target_dests[sel_c[2]] = {"Naam": sel_c[2], "lat": sel_c[0], "lon": sel_c[1], "PAX": tot_c_pax, "Infos": [f"Voorgestelde route: {sel_comp_route}"]}
 
             fig_map = go.Figure()
 
-            # 1. Lijnen van Concurrentie -> Mogelijke Route
+            # 1. Lijnen van Concurrentie -> Mogelijke Bestemming
             for rl in route_lines:
                 fig_map.add_trace(go.Scattergeo(
                     lon=[rl["o_lon"], rl["d_lon"]],
                     lat=[rl["o_lat"], rl["d_lat"]],
                     mode="lines",
-                    line=dict(width=2.0, color="rgba(13, 148, 136, 0.70)"),
+                    line=dict(width=1.8, color="rgba(13, 148, 136, 0.55)"),
                     hoverinfo="text",
                     text=rl["label"],
                     showlegend=False
                 ))
 
-            # 2. Voorgestelde route-lijn vanaf GRQ -> Mogelijke Route (oranje stippellijn)
+            # 2. Voorgestelde route-lijn vanaf GRQ -> Mogelijke Bestemming (oranje stippellijn)
             for d_info in target_dests.values():
                 fig_map.add_trace(go.Scattergeo(
                     lon=[grq_lon, d_info["lon"]],
                     lat=[grq_lat, d_info["lat"]],
                     mode="lines",
-                    line=dict(width=2.2, color="rgba(243, 112, 33, 0.85)", dash="dash"),
+                    line=dict(width=2.5, color="rgba(243, 112, 33, 0.90)", dash="dash"),
                     hoverinfo="text",
                     text=f"Potentiële route: GRQ → {d_info['Naam']}",
                     showlegend=False
@@ -777,7 +841,7 @@ with tab3:
             if comp_origins:
                 df_o = pd.DataFrame(list(comp_origins.values()))
                 max_o_pax = df_o["PAX"].max() or 1
-                o_sizes = [max(13, min(36, (v / max_o_pax) * 36)) for v in df_o["PAX"]]
+                o_sizes = [max(13, min(38, (v / max_o_pax) * 38)) for v in df_o["PAX"]]
                 o_hover = ["<br>".join(i) for i in df_o["Infos"]]
                 fig_map.add_trace(go.Scattergeo(
                     lon=df_o["lon"],
@@ -800,11 +864,11 @@ with tab3:
                     lat=df_d["lat"],
                     text=df_d["Naam"],
                     customdata=d_hover,
-                    hovertemplate="<b>Bestemming: %{text}</b><br>%{customdata}<extra></extra>",
+                    hovertemplate="<b>Mogelijke Bestemming: %{text}</b><br>%{customdata}<extra></extra>",
                     mode="markers+text",
                     textposition="top center",
                     name="Mogelijke Bestemming",
-                    marker=dict(size=16, color="#F59E0B", symbol="diamond", line=dict(width=1.5, color="#FFFFFF"))
+                    marker=dict(size=17, color="#F59E0B", symbol="diamond", line=dict(width=1.5, color="#FFFFFF"))
                 ))
 
             all_lats = [grq_lat] + [v["lat"] for v in comp_origins.values()] + [v["lat"] for v in target_dests.values()]
@@ -812,7 +876,7 @@ with tab3:
             center_lat = (min(all_lats) + max(all_lats)) / 2
             center_lon = (min(all_lons) + max(all_lons)) / 2
             span = max(max(all_lats) - min(all_lats), max(all_lons) - min(all_lons), 4.0)
-            auto_zoom = max(2.2, min(5.5, 22.0 / span))
+            auto_zoom = max(2.2, min(5.2, 22.0 / span))
 
             fig_map.update_geos(
                 scope="europe",
@@ -842,21 +906,25 @@ with tab3:
 
             c1, c2 = st.columns(2)
             with c1:
-                if {'Routing', 'Frequency per Week', 'Catchment'}.issubset(df_comp_view.columns):
+                if {'Routing', 'Frequency per Week', 'Origin_Airport'}.issubset(df_comp_view.columns):
                     fig_freq = px.bar(
-                        df_comp_view, x='Routing', y='Frequency per Week', color='Catchment',
+                        df_comp_view, x='Routing', y='Frequency per Week', color='Origin_Airport',
                         color_discrete_sequence=GRQ_PALETTE, title="Wekelijkse Frequentie per Concurrent"
                     )
                     st.plotly_chart(style_fig(fig_freq), use_container_width=True)
             with c2:
-                if {'Routing', 'PAX from catchment', 'Catchment'}.issubset(df_comp_view.columns):
+                if {'Routing', 'PAX_clean', 'Origin_Airport'}.issubset(df_comp_view.columns):
                     fig_pax = px.bar(
-                        df_comp_view, x='Routing', y='PAX from catchment', color='Catchment',
-                        color_discrete_sequence=GRQ_PALETTE, title="PAX uit GRQ Catchment per Routing"
+                        df_comp_view, x='Routing', y='PAX_clean', color='Origin_Airport',
+                        color_discrete_sequence=GRQ_PALETTE, title="PAX uit GRQ Catchment per Routing",
+                        labels={'PAX_clean': 'PAX from catchment'}
                     )
                     st.plotly_chart(style_fig(fig_pax), use_container_width=True)
 
-            st.dataframe(df_comp_view, use_container_width=True, hide_index=True)
+            disp_comp = df_comp_view.copy()
+            if 'PAX_clean' in disp_comp.columns:
+                disp_comp['PAX from catchment'] = disp_comp['PAX_clean']
+            st.dataframe(disp_comp.drop(columns=[c for c in ['PAX_clean', 'Origin_Airport', 'Dest_Airport'] if c in disp_comp.columns]), use_container_width=True, hide_index=True)
 
 # ==========================================
 # TAB 5: SURFACE LEAKAGE
@@ -871,14 +939,18 @@ with tab4:
         else:
             df_leak_view = df_leak
 
-        if {'Destination', 'Pax leakage', 'Region'}.issubset(df_leak_view.columns):
+        if {'Destination', 'Leakage_clean', 'Region'}.issubset(df_leak_view.columns):
             fig_leak = px.bar(
-                df_leak_view.sort_values(by='Pax leakage', ascending=False).head(20),
-                x='Destination', y='Pax leakage', color='Region', text_auto=True,
-                color_discrete_sequence=GRQ_PALETTE, title="Top Bestemmingen op Passagierslekkage"
+                df_leak_view.sort_values(by='Leakage_clean', ascending=False).head(20),
+                x='Destination', y='Leakage_clean', color='Region', text_auto=True,
+                color_discrete_sequence=GRQ_PALETTE, title="Top Bestemmingen op Passagierslekkage",
+                labels={'Leakage_clean': 'Pax leakage'}
             )
             st.plotly_chart(style_fig(fig_leak), use_container_width=True)
-        st.dataframe(df_leak_view, use_container_width=True, hide_index=True)
+        disp_leak = df_leak_view.copy()
+        if 'Leakage_clean' in disp_leak.columns:
+            disp_leak['Pax leakage'] = disp_leak['Leakage_clean']
+        st.dataframe(disp_leak.drop(columns=[c for c in ['Leakage_clean'] if c in disp_leak.columns]), use_container_width=True, hide_index=True)
     else:
         st.info("Geen data beschikbaar voor deze filterselectie.")
 
@@ -887,20 +959,26 @@ with tab4:
 # ==========================================
 with tab5:
     st.subheader("📅 Netwerk Connectivity, Dagen & Vloot")
-    if not df_conn.empty:
-        if 'Airline' in df_conn.columns:
-            airlines = sorted(df_conn['Airline'].dropna().unique().tolist())
+    if not df_conn_raw.empty:
+        # Filter ook op airlines van geselecteerde routes indien van toepassing
+        active_airlines = [a for p in active_proposals for a in p["airlines"]]
+        df_conn_base = df_conn_raw[df_conn_raw['Airline'].astype(str).str.upper().isin(active_airlines)] if (selected_labels and 'Airline' in df_conn_raw.columns and active_airlines) else df_conn_raw
+
+        if 'Airline' in df_conn_base.columns:
+            airlines = sorted(df_conn_base['Airline'].dropna().unique().tolist())
             sel_air = st.multiselect("Filter op Luchtvaartmaatschappij / Alliantie:", airlines, default=airlines)
-            df_conn_view = df_conn[df_conn['Airline'].isin(sel_air)]
+            df_conn_view = df_conn_base[df_conn_base['Airline'].isin(sel_air)]
         else:
-            df_conn_view = df_conn
+            df_conn_view = df_conn_base
 
         col1, col2 = st.columns(2)
         with col1:
             if {'Day outbound', 'Transfer Potential', 'Airline'}.issubset(df_conn_view.columns):
+                day_order = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
                 fig_trans = px.line(
                     df_conn_view[df_conn_view['Day outbound'] != 'AverageDay'],
                     x='Day outbound', y='Transfer Potential', color='Airline', markers=True,
+                    category_orders={'Day outbound': day_order},
                     color_discrete_sequence=GRQ_PALETTE, title="Transfer Potentieel % per Weekdag"
                 )
                 st.plotly_chart(style_fig(fig_trans), use_container_width=True)
