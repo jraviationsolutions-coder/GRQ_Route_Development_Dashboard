@@ -1002,6 +1002,7 @@ with tab5:
 st.markdown(
     '<div class="brand-footer">'
     '<span><strong>Groningen Airport Eelde (GRQ)</strong> — Route Development & Network Analytics</span>'
+    '<span>Powered by <strong>Alpha Phase [Version 0.9.8]</strong></span>'
     '<span>Powered by <strong>JR Aviation Solutions</strong></span>'
     '</div>',
     unsafe_allow_html=True
