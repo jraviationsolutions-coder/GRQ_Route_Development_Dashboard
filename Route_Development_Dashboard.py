@@ -543,11 +543,11 @@ tab_overview, tab_single, tab1, tab2, tab3, tab4, tab5 = st.tabs([
 with tab_overview:
     head_col, btn_col = st.columns([2.2, 1.0])
     with head_col:
-        st.subheader("📊 Gecombineerde Beslismatrix")
+        st.subheader("📊 Gecombineerde Beslismatrix (Uitsluitend Routes uit Tabblad 1)")
     with btn_col:
         with st.popover("📐 Formule & Berekening Potentie Score", use_container_width=True):
             st.markdown("### 📐 Opbouw Potentie Score (0 – 100 pt)")
-            st.latex(r"	ext{Potentie Score} = (0{,}45 	imes 	ext{Vraagscore}) + (0{,}35 	imes 	ext{Transfer Potentieel}) + (0{,}20 	imes 	ext{Marktruimte})")
+            st.latex(r"\text{Potentie Score} = (0{,}45 \times \text{Vraagscore}) + (0{,}35 \times \text{Transfer Potentieel}) + (0{,}20 \times \text{Marktruimte})")
             st.markdown("""
             1. **Vraag vanuit GRQ-catchment (45%):** `Pax leakage` (of `PAX from catchment`), geschaald t.o.v. de grootste route uit Tabblad 1 (`0–100 pt`).
             2. **Transfer & Netwerk Connectiviteit (35%):** Gemiddelde `Transfer Potential %` over alle weekdagen (`Mo`–`Su`) van de voorgestelde maatschappij.
@@ -556,7 +556,7 @@ with tab_overview:
             if not df_matrix.empty:
                 st.markdown("#### Live doorrekening per voorgestelde route:")
                 calc_df = pd.DataFrame({
-                    "Route": df_matrix["Voorgestelde Route"],
+                    "Route": df_matrix["Voorgestelde Route (Tab 1)"],
                     "1. Vraag (45%)": df_matrix["_vraag_sc"].apply(lambda x: f"{x:.1f} pt (×0,45 = {0.45*x:.1f})"),
                     "2. Transfer (35%)": df_matrix["_transfer_sc"].apply(lambda x: f"{x:.1f} pt (×0,35 = {0.35*x:.1f})"),
                     "3. Marktruimte (20%)": df_matrix["_marktruimte_sc"].apply(lambda x: f"{x:.1f} pt (×0,20 = {0.20*x:.1f})"),
@@ -635,7 +635,7 @@ with tab_single:
             st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
             with st.popover(f"📐 Score-opbouw {chosen_prop['iata']}", use_container_width=True):
                 st.markdown(f"### Score-opbouw: {chosen_label}")
-                st.latex(r"	ext{Score} = (0{,}45 	imes V) + (0{,}35 	imes T) + (0{,}20 	imes M)")
+                st.latex(r"\text{Score} = (0{,}45 \times V) + (0{,}35 \times T) + (0{,}20 \times M)")
                 st.markdown(f"""
                 - **Vraagscore ($V$):** `{row_dest['_vraag_sc']:.1f}` pt $\times 0{{,}}45 =$ **{0.45 * row_dest['_vraag_sc']:.1f} pt** ({int(row_dest['Catchment / Leakage PAX']):,} PAX)
                 - **Transfer Potentieel ($T$):** `{row_dest['_transfer_sc']:.1f}` pt $\times 0{{,}}35 =$ **{0.35 * row_dest['_transfer_sc']:.1f} pt**
