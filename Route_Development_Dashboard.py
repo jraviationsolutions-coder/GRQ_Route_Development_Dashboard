@@ -308,22 +308,54 @@ def fix_eu_prob(val):
     except Exception:
         return 0.0
 
+def detect_csv_sheet_type(df, filename=""):
+    """Automatically maps a CSV file to the corresponding MK-Metric module based on columns or filename."""
+    cols = {c.lower().strip() for c in df.columns}
+    fname = filename.lower()
+    if {'arrival', 'pax type'}.intersection(cols) or 'acft propsal' in cols or 'proposal' in fname:
+        return 'Proposal Investigation'
+    if 'probability% business' in cols or 'probability% non-business' in cols or 'trip purpose' in cols or 'choice' in fname:
+        return 'Airport Choice'
+    if 'pax from catchment' in cols or 'frequency per week' in cols or 'competitor' in fname:
+        return 'Route Competitors'
+    if 'pax leakage' in cols or 'leakage' in fname:
+        return 'Surface Leakage'
+    if 'transfer potential' in cols or 'day outbound' in cols or 'connectivity' in fname:
+        return 'Weighted Connectivity'
+    return 'Proposal Investigation'
+
 @st.cache_data
-def load_all_sheets(file_source):
-    try:
-        xls = pd.ExcelFile(file_source)
-        sheets_data = {}
-        for sheet in xls.sheet_names:
-            try:
-                df = pd.read_excel(xls, sheet_name=sheet)
+def load_uploaded_files(files):
+    """Loads one .xlsx workbook or one/multiple .csv files (auto-detecting delimiter and module)."""
+    sheets_data = {}
+    for file_obj in files:
+        fname = file_obj.name.lower()
+        try:
+            if fname.endswith('.xlsx'):
+                xls = pd.ExcelFile(file_obj)
+                for sheet in xls.sheet_names:
+                    try:
+                        df = pd.read_excel(xls, sheet_name=sheet)
+                        df.columns = df.columns.astype(str).str.strip()
+                        sheets_data[sheet] = df
+                    except Exception:
+                        sheets_data[sheet] = pd.DataFrame()
+            elif fname.endswith('.csv'):
+                # Auto-detect comma vs semicolon delimiter (standard in EU MK-Metric exports)
+                raw_bytes = file_obj.getvalue()
+                text_sample = raw_bytes[:4096].decode('utf-8', errors='replace')
+                sep = ';' if text_sample.count(';') > text_sample.count(',') else ','
+                df = pd.read_csv(file_obj, sep=sep)
                 df.columns = df.columns.astype(str).str.strip()
-                sheets_data[sheet] = df
-            except Exception:
-                sheets_data[sheet] = pd.DataFrame()
-        return sheets_data
-    except Exception as e:
-        st.error(f"Error loading workbook: {e}")
-        return None
+                target_sheet = detect_csv_sheet_type(df, file_obj.name)
+                if target_sheet in sheets_data and not sheets_data[target_sheet].empty:
+                    sheets_data[target_sheet] = pd.concat([sheets_data[target_sheet], df], ignore_index=True)
+                else:
+                    sheets_data[target_sheet] = df
+        except Exception as e:
+            st.error(f"Error loading '{file_obj.name}': {e}")
+            return None
+    return sheets_data if sheets_data else None
 
 def find_col(df, candidates):
     if df.empty:
@@ -366,13 +398,18 @@ def resolve_coords(text):
             return coords
     return None
 
-uploaded_file = st.sidebar.file_uploader("Upload Market Dataset (.xlsx)", type=["xlsx"])
+uploaded_files = st.sidebar.file_uploader(
+    "Upload Market Dataset (.xlsx or .csv)",
+    type=["xlsx", "csv"],
+    accept_multiple_files=True,
+    help="Upload a multi-sheet .xlsx workbook or one/multiple .csv exports (comma- or semicolon-separated)."
+)
 
-if uploaded_file is None:
-    st.info("Upload an MK-Metric / Route Development workbook (`.xlsx`) in the left sidebar to initialize the analytical dashboard.")
+if not uploaded_files:
+    st.info("Upload an MK-Metric / Route Development workbook (`.xlsx`) or one/multiple `.csv` exports in the left sidebar to initialize the analytical dashboard.")
     st.stop()
 
-all_data = load_all_sheets(uploaded_file)
+all_data = load_uploaded_files(uploaded_files)
 if not all_data:
     st.stop()
 
@@ -571,11 +608,11 @@ with tab_overview:
     with btn_col:
         with st.popover("Scoring Methodology & Live Breakdown", use_container_width=True):
             st.markdown("### Route Potential Score Architecture (0 – 100 pts)")
-            st.latex(r"	ext{Potential Score} = (0.45 	imes 	ext{Demand}) + (0.35 	imes 	ext{Connectivity}) + (0.20 	imes 	ext{Market Headroom})")
+            st.latex(r"\text{Potential Score} = (0.45 \times \text{Demand}) + (0.35 \times \text{Connectivity}) + (0.20 \times \text{Market Headroom})")
             st.markdown("""
             1. **Catchment & Leakage Demand (45%):** Derived from `Pax leakage` (or `PAX from catchment` in *Route Competitors*), normalized against the highest-volume proposal in Sheet 1 (`0–100 pts`).
             2. **Network Transfer Connectivity (35%):** Mean `Transfer Potential %` across individual operating days (`Mo`–`Su`, excluding `AverageDay`) for the proposed carrier(s).
-            3. **Competitive Market Headroom (20%):** Non-captive market share outside the dominant competing routing (typically AMS): $\min((100\% - 	ext{Max. Choice Prob.}) 	imes 2.5,\; 100)$.
+            3. **Competitive Market Headroom (20%):** Non-captive market share outside the dominant competing routing (typically AMS): $\min((100\% - \text{Max. Choice Prob.}) \times 2.5,\; 100)$.
             """)
             if not df_matrix.empty:
                 st.markdown("#### Live Component Breakdown by Proposed Route")
@@ -659,11 +696,11 @@ with tab_single:
             st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
             with st.popover(f"Score Decomposition — {chosen_prop['iata']}", use_container_width=True):
                 st.markdown(f"### Score Decomposition: {chosen_label}")
-                st.latex(r"	ext{Score} = (0.45 	imes D) + (0.35 	imes C) + (0.20 	imes H)")
+                st.latex(r"\text{Score} = (0.45 \times D) + (0.35 \times C) + (0.20 \times H)")
                 st.markdown(f"""
-                - **Demand Score ($D$):** `{row_dest['_demand_sc']:.1f}` pts $	imes 0.45 =$ **{0.45 * row_dest['_demand_sc']:.1f} pts** ({int(row_dest['Catchment / Leakage PAX']):,} PAX)
-                - **Transfer Connectivity ($C$):** `{row_dest['_transfer_sc']:.1f}` pts $	imes 0.35 =$ **{0.35 * row_dest['_transfer_sc']:.1f} pts**
-                - **Market Headroom ($H$):** `{row_dest['_headroom_sc']:.1f}` pts $	imes 0.20 =$ **{0.20 * row_dest['_headroom_sc']:.1f} pts** (Dominant competitor share: {row_dest['_max_prob']:.1f}%)
+                - **Demand Score ($D$):** `{row_dest['_demand_sc']:.1f}` pts $\times 0.45 =$ **{0.45 * row_dest['_demand_sc']:.1f} pts** ({int(row_dest['Catchment / Leakage PAX']):,} PAX)
+                - **Transfer Connectivity ($C$):** `{row_dest['_transfer_sc']:.1f}` pts $\times 0.35 =$ **{0.35 * row_dest['_transfer_sc']:.1f} pts**
+                - **Market Headroom ($H$):** `{row_dest['_headroom_sc']:.1f}` pts $\times 0.20 =$ **{0.20 * row_dest['_headroom_sc']:.1f} pts** (Dominant competitor share: {row_dest['_max_prob']:.1f}%)
                 - **Composite Potential Score:** **{row_dest['Potential Score']:.1f} / 100 pts**
                 """)
 
@@ -1069,7 +1106,7 @@ with tab5:
 st.markdown(
     '<div class="brand-footer">'
     '<span><strong>Groningen Airport Eelde (GRQ)</strong> — Route Development &amp; Network Intelligence</span>'
-    '<span><strong>Alpha Phase [Version 0.8.1.9]</strong></span>'
+    '<span><strong>Release [Version 1.0.0]</strong></span>'
     '<span>Powered by <strong>JR Aviation Solutions</strong></span>'
     '</div>',
     unsafe_allow_html=True
