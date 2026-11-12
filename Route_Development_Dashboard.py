@@ -1,7 +1,25 @@
+Hier zijn de twee aanpassingen doorgevoerd:
+
+1. **Gecombineerde Beslismatrix uitsluitend gebaseerd op Tabblad 1 (`Proposal Investigation`):** De lijst met bestemmingen voor de matrix wordt nu uitsluitend opgebouwd uit het tabblad `Proposal Investigation`, zodat alleen jouw daadwerkelijk onderzochte routevoorstellen worden geëvalueerd en gescoord (zonder vervuiling door losse bestemmingen uit andere tabbladen).
+2. **Interactieve Europese Landkaart voor `Route Competitors`:**
+* Een **routekiezer** waarmee je per voorgestelde route ziet welke concurrerende luchthavens (zoals AMS, EIN, BRE, DUS, MST, RTM) en bestemmingen actief zijn.
+* Een **interactieve landkaart (`go.Scattergeo` op Europa)** waarop **Groningen Airport Eelde (GRQ)** in oranje wordt getoond samen met de **concurrerende luchthavens (en vlieglijnen)**, waarbij de grootte van de stip het aantal **PAX uit het GRQ-catchment** weergeeft.
+* Ingebouwde coördinatenbibliotheek voor Europese luchthavens en bestemmingen (plus automatische detectie als jouw Excel-tabblad zelf `Lat`/`Lon`-kolommen heeft).
+
+
+
+---
+
+### Volledige bijgewerkte code voor `Route_Development_Dashboard.py`
+
+Kopieer onderstaande code en vervang de inhoud van `Route_Development_Dashboard.py` op GitHub:
+
+```python
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import re
 
 st.set_page_config(
     page_title="Groningen Airport Eelde (GRQ) | Route Development",
@@ -10,7 +28,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# GRQ Kleurenpalet (werkt contrastrijk in zowel Light als Dark mode)
+# GRQ Kleurenpalet (Light & Dark mode adaptief)
 GRQ_ORANGE = "#F37021"
 GRQ_ORANGE_LIGHT = "#FF9E5E"
 GRQ_CHARCOAL = "#3A3F42"
@@ -18,12 +36,90 @@ GRQ_SLATE = "#64748B"
 GRQ_TEAL = "#0D9488"
 GRQ_PALETTE = [GRQ_ORANGE, "#334155", GRQ_TEAL, GRQ_ORANGE_LIGHT, "#94A3B8", "#D95D13"]
 
-# Adaptieve CSS (gebruikt Streamlit's thema-variabelen voor Light & Dark mode)
+# Coördinaten-database voor luchthavens & Europese bestemmingen (voor de Route Competitors kaart)
+AIRPORT_COORDS = {
+    # Catchment / Concurrerende luchthavens
+    "GRQ": (53.1197, 6.5794, "Groningen Airport Eelde (GRQ)"),
+    "EHGG": (53.1197, 6.5794, "Groningen Airport Eelde (GRQ)"),
+    "GRONINGEN": (53.1197, 6.5794, "Groningen Airport Eelde (GRQ)"),
+    "AMS": (52.3105, 4.7683, "Amsterdam Schiphol (AMS)"),
+    "EHAM": (52.3105, 4.7683, "Amsterdam Schiphol (AMS)"),
+    "AMSTERDAM": (52.3105, 4.7683, "Amsterdam Schiphol (AMS)"),
+    "EIN": (51.4501, 5.3745, "Eindhoven Airport (EIN)"),
+    "EHEH": (51.4501, 5.3745, "Eindhoven Airport (EIN)"),
+    "EINDHOVEN": (51.4501, 5.3745, "Eindhoven Airport (EIN)"),
+    "RTM": (51.9569, 4.4372, "Rotterdam The Hague (RTM)"),
+    "MST": (50.9117, 5.7701, "Maastricht Aachen (MST)"),
+    "BRE": (53.0475, 8.7867, "Bremen Airport (BRE)"),
+    "BREMEN": (53.0475, 8.7867, "Bremen Airport (BRE)"),
+    "FMO": (52.1346, 7.6848, "Münster Osnabrück (FMO)"),
+    "DUS": (51.2895, 6.7668, "Düsseldorf Airport (DUS)"),
+    "NRN": (51.6024, 6.1422, "Weeze Airport (NRN)"),
+    "HAM": (53.6304, 9.9882, "Hamburg Airport (HAM)"),
+    "HAJ": (52.4611, 9.6850, "Hannover Airport (HAJ)"),
+    "BRU": (50.9010, 4.4856, "Brussels Airport (BRU)"),
+    "CRL": (50.4592, 4.4538, "Brussels South Charleroi (CRL)"),
+    # Veelvoorkomende Europese bestemmingen
+    "STN": (51.8860, 0.2389, "London Stansted (STN)"),
+    "SEN": (51.5714, 0.6956, "London Southend (SEN)"),
+    "LHR": (51.4700, -0.4543, "London Heathrow (LHR)"),
+    "LGW": (51.1537, -0.1821, "London Gatwick (LGW)"),
+    "LCY": (51.5048, 0.0495, "London City (LCY)"),
+    "LONDON": (51.8860, 0.2389, "London (STN/LCY)"),
+    "LONDEN": (51.8860, 0.2389, "Londen (STN/LCY)"),
+    "AGP": (36.6749, -4.4991, "Málaga (AGP)"),
+    "MALAGA": (36.6749, -4.4991, "Málaga (AGP)"),
+    "ALC": (38.2822, -0.5582, "Alicante (ALC)"),
+    "ALICANTE": (38.2822, -0.5582, "Alicante (ALC)"),
+    "PMI": (39.5517, 2.7388, "Palma de Mallorca (PMI)"),
+    "PALMA": (39.5517, 2.7388, "Palma de Mallorca (PMI)"),
+    "BCN": (41.2974, 2.0833, "Barcelona (BCN)"),
+    "BARCELONA": (41.2974, 2.0833, "Barcelona (BCN)"),
+    "MAD": (40.4983, -3.5676, "Madrid (MAD)"),
+    "FAO": (37.0144, -7.9659, "Faro (FAO)"),
+    "FARO": (37.0144, -7.9659, "Faro (FAO)"),
+    "LIS": (38.7756, -9.1354, "Lissabon (LIS)"),
+    "CPH": (55.6180, 12.6508, "Kopenhagen (CPH)"),
+    "COPENHAGEN": (55.6180, 12.6508, "Kopenhagen (CPH)"),
+    "KOPENHAGEN": (55.6180, 12.6508, "Kopenhagen (CPH)"),
+    "OSL": (60.1976, 11.1004, "Oslo (OSL)"),
+    "ARN": (59.6498, 17.9238, "Stockholm (ARN)"),
+    "MUC": (48.3537, 11.7750, "München (MUC)"),
+    "MUNICH": (48.3537, 11.7750, "München (MUC)"),
+    "FRA": (50.0379, 8.5622, "Frankfurt (FRA)"),
+    "BER": (52.3667, 13.5033, "Berlijn (BER)"),
+    "INN": (47.2602, 11.3440, "Innsbruck (INN)"),
+    "INNSBRUCK": (47.2602, 11.3440, "Innsbruck (INN)"),
+    "SZG": (47.7933, 13.0043, "Salzburg (SZG)"),
+    "VIE": (48.1103, 16.5697, "Wenen (VIE)"),
+    "ZRH": (47.4582, 8.5555, "Zürich (ZRH)"),
+    "GVA": (46.2370, 6.1092, "Genève (GVA)"),
+    "GDN": (54.3776, 18.4662, "Gdańsk (GDN)"),
+    "GDANSK": (54.3776, 18.4662, "Gdańsk (GDN)"),
+    "WAW": (52.1672, 20.9679, "Warschau (WAW)"),
+    "KRK": (50.0777, 19.7848, "Krakau (KRK)"),
+    "SPU": (43.5389, 16.2980, "Split (SPU)"),
+    "SPLIT": (43.5389, 16.2980, "Split (SPU)"),
+    "DBV": (42.5614, 18.2682, "Dubrovnik (DBV)"),
+    "FCO": (41.8003, 12.2389, "Rome (FCO)"),
+    "MXP": (45.6301, 8.7255, "Milaan (MXP)"),
+    "CDG": (49.0097, 2.5479, "Parijs (CDG)"),
+    "DUB": (53.4264, -6.2499, "Dublin (DUB)"),
+    "EDI": (55.9508, -3.3615, "Edinburgh (EDI)"),
+    "MAN": (53.3588, -2.2727, "Manchester (MAN)"),
+    "ABZ": (57.2019, -2.1978, "Aberdeen (ABZ)"),
+    "ACE": (28.9455, -13.6052, "Lanzarote (ACE)"),
+    "TFS": (28.0445, -16.5725, "Tenerife (TFS)"),
+    "LPA": (27.9319, -15.3866, "Gran Canaria (LPA)"),
+    "HER": (35.3397, 25.1803, "Heraklion (HER)"),
+    "AYT": (36.8987, 30.8005, "Antalya (AYT)")
+}
+
+# Adaptieve CSS voor Light & Dark mode
 st.markdown(f"""<style>
 .main {{ padding: 1.2rem 2rem; }}
 h1, h2, h3 {{ letter-spacing: 0.01em; font-weight: 600; }}
 
-/* Adaptieve GRQ Brand Header */
 .brand-header {{
     display: flex;
     align-items: center;
@@ -63,7 +159,6 @@ h1, h2, h3 {{ letter-spacing: 0.01em; font-weight: 600; }}
     white-space: nowrap;
 }}
 
-/* Adaptieve Metric Cards */
 [data-testid="stMetric"] {{
     background-color: var(--secondary-background-color);
     border: 1px solid rgba(128, 128, 128, 0.22);
@@ -72,7 +167,6 @@ h1, h2, h3 {{ letter-spacing: 0.01em; font-weight: 600; }}
     border-radius: 8px;
 }}
 
-/* Compacte Signaal-Chips (vervangt grote tekstvakken) */
 .signal-card {{
     background-color: var(--secondary-background-color);
     border: 1px solid rgba(128, 128, 128, 0.22);
@@ -95,7 +189,6 @@ h1, h2, h3 {{ letter-spacing: 0.01em; font-weight: 600; }}
     margin-top: 2px;
 }}
 
-/* Tabbladen styling */
 .stTabs [data-baseweb="tab-list"] {{
     gap: 6px;
     border-bottom: 1px solid rgba(128, 128, 128, 0.25);
@@ -116,7 +209,6 @@ h1, h2, h3 {{ letter-spacing: 0.01em; font-weight: 600; }}
     border: 1px solid {GRQ_ORANGE} !important;
 }}
 
-/* Footer */
 .brand-footer {{
     margin-top: 40px;
     padding-top: 14px;
@@ -129,11 +221,9 @@ h1, h2, h3 {{ letter-spacing: 0.01em; font-weight: 600; }}
 }}
 </style>""", unsafe_allow_html=True)
 
-# Groningen Airport Eelde SVG Beeldmerk
 GRQ_ICON_SVG = '<svg width="44" height="54" viewBox="0 0 80 100" fill="none" xmlns="http://www.w3.org/2000/svg"><ellipse cx="14" cy="60" rx="7" ry="15" transform="rotate(24 14 60)" fill="#F37021"/><ellipse cx="32" cy="33" rx="5.5" ry="11.5" transform="rotate(38 32 33)" fill="#F37021"/><ellipse cx="52" cy="15" rx="3.8" ry="8.5" transform="rotate(50 52 15)" fill="#F37021"/><ellipse cx="26" cy="80" rx="10.5" ry="19" transform="rotate(22 26 80)" fill="#F37021"/><ellipse cx="48" cy="40" rx="8.5" ry="16.5" transform="rotate(36 48 40)" fill="#F37021"/><ellipse cx="68" cy="11" rx="6" ry="13.5" transform="rotate(48 68 11)" fill="#F37021"/></svg>'
 
 def style_fig(fig):
-    """Maakt Plotly-grafieken transparant zodat ze perfect werken in Light én Dark mode."""
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
@@ -213,6 +303,25 @@ def filter_df_multi(df, selected_list, col_candidates):
     mask = df[col].astype(str).apply(lambda x: any(p.lower() in x.lower() for p in patterns))
     return df[mask]
 
+def resolve_coords(text):
+    """Zoekt luchthaven- of stadsenamen in een string (bijv. 'AMS-AGP' of 'Amsterdam') en geeft (lat, lon, label)."""
+    if not text:
+        return None
+    txt_upper = str(text).upper().strip()
+    # Directe match
+    if txt_upper in AIRPORT_COORDS:
+        return AIRPORT_COORDS[txt_upper]
+    # Zoek op 3-letterige IATA codes in strings zoals 'AMS-AGP' of 'EHAM - LEPA'
+    tokens = re.split(r'[^A-Z0-9]+', txt_upper)
+    for tok in tokens:
+        if tok in AIRPORT_COORDS and tok not in ["GRQ", "EHGG"]:
+            return AIRPORT_COORDS[tok]
+    # Zoek op stadsnaam als substring
+    for key, coords in AIRPORT_COORDS.items():
+        if len(key) > 3 and key in txt_upper:
+            return coords
+    return None
+
 uploaded_file = st.sidebar.file_uploader("📂 Upload Excel-bestand (.xlsx)", type=["xlsx"])
 
 if uploaded_file is None:
@@ -230,33 +339,30 @@ df_leak_raw = all_data.get('Surface Leakage', pd.DataFrame())
 df_conn_raw = all_data.get('Weighted Connectivity', pd.DataFrame())
 
 # ==========================================
+# UITSLUITEND BESTEMMINGEN UIT TABBLAD 1 (PROPOSAL INVESTIGATION)
+# ==========================================
+prop_destinations = []
+prop_col = find_col(df_prop_raw, ['Route', 'Destination', 'Routing'])
+if prop_col and not df_prop_raw.empty:
+    seen = set()
+    for val in df_prop_raw[prop_col].dropna().unique():
+        cleaned = clean_route_name(val)
+        if cleaned and cleaned not in seen:
+            seen.add(cleaned)
+            prop_destinations.append(cleaned)
+
+# ==========================================
 # GLOBALE FILTERS IN DE ZIJBALK
 # ==========================================
 st.sidebar.markdown("### 🔍 Globale Filters")
 
-# Verzamel alle unieke bestemmingen/routes uit alle tabbladen
-all_destinations = set()
-for df_s, cols in [
-    (df_prop_raw, ['Route', 'Destination', 'Routing']),
-    (df_choice_raw, ['Route', 'Destination']),
-    (df_leak_raw, ['Destination', 'Route']),
-    (df_comp_raw, ['Routing', 'Route', 'Destination'])
-]:
-    c_n = find_col(df_s, cols)
-    if c_n:
-        for val in df_s[c_n].dropna().unique():
-            all_destinations.add(clean_route_name(val))
-
-sorted_destinations = sorted(list(all_destinations))
-
 selected_dests = st.sidebar.multiselect(
-    "Filter op Bestemming(en) / Route(s)",
-    options=sorted_destinations,
+    "Filter op Voorgestelde Route(s) (Tab 1)",
+    options=prop_destinations,
     default=[],
-    placeholder="Alle bestemmingen tonen..."
+    placeholder="Alle routes uit Tab 1 tonen..."
 )
 
-# Segment filter (Business / Non-Business)
 pax_types = []
 if not df_prop_raw.empty and 'PAX Type' in df_prop_raw.columns:
     pax_types = sorted(df_prop_raw['PAX Type'].dropna().unique().tolist())
@@ -266,28 +372,37 @@ selected_pax = st.sidebar.multiselect(
     default=pax_types
 ) if pax_types else []
 
-# Minimale Surface Leakage slider
 min_leakage = 0
 if not df_leak_raw.empty and 'Pax leakage' in df_leak_raw.columns:
     max_l = int(pd.to_numeric(df_leak_raw['Pax leakage'], errors='coerce').max() or 0)
     if max_l > 0:
         min_leakage = st.sidebar.slider("Min. Surface Leakage (PAX)", 0, max_l, 0, step=max(1, max_l // 20))
 
-# Pas globale filters toe op de dataframes
+# Filter Tabblad 1 en bepaal actieve lijst van bestemmingen uit Tabblad 1
 df_prop = filter_df_multi(df_prop_raw, selected_dests, ['Route', 'Destination', 'Routing'])
 if selected_pax and not df_prop.empty and 'PAX Type' in df_prop.columns:
     df_prop = df_prop[df_prop['PAX Type'].isin(selected_pax)]
 
-df_choice = filter_df_multi(df_choice_raw, selected_dests, ['Route', 'Destination'])
-df_comp = filter_df_multi(df_comp_raw, selected_dests, ['Routing', 'Route', 'Destination'])
-df_leak = filter_df_multi(df_leak_raw, selected_dests, ['Destination', 'Route'])
+active_tab1_dests = []
+if prop_col and not df_prop.empty:
+    seen_active = set()
+    for val in df_prop[prop_col].dropna().unique():
+        cleaned = clean_route_name(val)
+        if cleaned and cleaned not in seen_active:
+            seen_active.add(cleaned)
+            active_tab1_dests.append(cleaned)
+
+# Filter overige tabbladen op basis van geselecteerde routes
+filter_target = selected_dests if selected_dests else []
+df_choice = filter_df_multi(df_choice_raw, filter_target, ['Route', 'Destination'])
+df_comp = filter_df_multi(df_comp_raw, filter_target, ['Routing', 'Route', 'Destination'])
+df_leak = filter_df_multi(df_leak_raw, filter_target, ['Destination', 'Route'])
 if min_leakage > 0 and not df_leak.empty and 'Pax leakage' in df_leak.columns:
     df_leak = df_leak[pd.to_numeric(df_leak['Pax leakage'], errors='coerce') >= min_leakage]
-
-df_conn = filter_df_multi(df_conn_raw, selected_dests, ['Destination', 'Route', 'Routing', 'Hub', 'Airline'])
+df_conn = filter_df_multi(df_conn_raw, filter_target, ['Destination', 'Route', 'Routing', 'Hub', 'Airline'])
 
 # ==========================================
-# HULPFUNCTIE: BEREKEN ROUTE SCORECARD
+# BEREKEN GECOMBINEERDE BESLISMATRIX (ALLEEN TABBLAD 1 BESTEMMINGEN)
 # ==========================================
 def build_route_summary(dest_list):
     max_leak = pd.to_numeric(df_leak_raw['Pax leakage'], errors='coerce').max() if ('Pax leakage' in df_leak_raw.columns and not df_leak_raw.empty) else 1
@@ -326,7 +441,7 @@ def build_route_summary(dest_list):
 
         score = round((0.40 * leak_sc) + (0.35 * min(best_prob, 100)) + (0.25 * min(avg_tr, 100)), 1)
         rows.append({
-            "Bestemming": dest,
+            "Voorgestelde Route (Tab 1)": dest,
             "Potentie Score": score,
             "Segment": pax_seg,
             "Surface Leakage": int(leak_v),
@@ -338,51 +453,48 @@ def build_route_summary(dest_list):
         })
     return pd.DataFrame(rows).sort_values(by="Potentie Score", ascending=False) if rows else pd.DataFrame()
 
-active_dest_pool = selected_dests if selected_dests else sorted_destinations
-df_matrix = build_route_summary(active_dest_pool)
+df_matrix = build_route_summary(active_tab1_dests)
 
 # ==========================================
 # TABS STRUCTUUR
 # ==========================================
 tab_overview, tab_single, tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "📊 Multi-Route Vergelijking",
+    "📊 Gecombineerde Beslismatrix",
     "🎯 Bestemming Deep-Dive",
-    "📍 Route Voorstellen", 
+    "📍 Route Voorstellen (Tab 1)", 
     "🧭 Airport Choice", 
-    "🥊 Concurrentie", 
+    "🥊 Route Competitors (Kaart)", 
     "💧 Surface Leakage", 
     "📅 Connectivity & Vloot"
 ])
 
 # ==========================================
-# TAB 0: MULTI-ROUTE VERGELIJKING (OVERZICHT)
+# TAB 0: GECOMBINEERDE BESLISMATRIX (ALLEEN TAB 1)
 # ==========================================
 with tab_overview:
-    st.subheader("📊 Integrale Route Vergelijking & Kansenmatrix")
+    st.subheader("📊 Gecombineerde Beslismatrix (Uitsluitend Routes uit Tabblad 1)")
 
     if df_matrix.empty:
-        st.warning("Geen gekoppelde routes gevonden voor de huidige filterselectie.")
+        st.warning("Geen voorgestelde routes gevonden in Tabblad 1 ('Proposal Investigation') voor deze filterselectie.")
     else:
-        # Bovenste KPI-rij
         top_route = df_matrix.iloc[0]
         m1, m2, m3, m4 = st.columns(4)
-        m1.metric("🥇 Hoogst Scorende Bestemming", top_route["Bestemming"], f"{top_route['Potentie Score']} / 100 pt")
+        m1.metric("🥇 Hoogst Scorende Voorstel", top_route["Voorgestelde Route (Tab 1)"], f"{top_route['Potentie Score']} / 100 pt")
         m2.metric("💧 Totale Surface Leakage", f"{df_matrix['Surface Leakage'].sum():,}".replace(",", "."))
         m3.metric("📈 Gem. GRQ Keuzekans", f"{df_matrix[['Business Kans %', 'Leisure Kans %']].max(axis=1).mean():.1f}%")
-        m4.metric("✈️ Geselecteerde Routes", len(df_matrix))
+        m4.metric("✈️ Routes uit Tabblad 1", len(df_matrix))
 
-        # Visuele grafieken naast elkaar (geen grote tekstvakken)
         g1, g2 = st.columns(2)
         with g1:
             fig_rank = px.bar(
-                df_matrix.head(12),
+                df_matrix,
                 x="Potentie Score",
-                y="Bestemming",
+                y="Voorgestelde Route (Tab 1)",
                 orientation="h",
                 color="Segment",
                 text_auto=True,
                 color_discrete_sequence=[GRQ_ORANGE, GRQ_SLATE, GRQ_TEAL],
-                title="Top Routes op Gecombineerde GRQ Potentie Score (0-100)"
+                title="Ranking Voorgestelde Routes (Tab 1) op Potentie Score"
             )
             fig_rank.update_layout(yaxis={'categoryorder': 'total ascending'})
             st.plotly_chart(style_fig(fig_rank), use_container_width=True)
@@ -394,15 +506,13 @@ with tab_overview:
                 y="Business Kans %" if df_matrix["Business Kans %"].sum() > df_matrix["Leisure Kans %"].sum() else "Leisure Kans %",
                 size="Potentie Score",
                 color="Segment",
-                text="Bestemming",
+                text="Voorgestelde Route (Tab 1)",
                 color_discrete_sequence=[GRQ_ORANGE, GRQ_TEAL, GRQ_SLATE],
                 title="Vraag (Leakage) vs. GRQ Voorkeur (Bubbel = Score)"
             )
             fig_bubble.update_traces(textposition='top center')
             st.plotly_chart(style_fig(fig_bubble), use_container_width=True)
 
-        # Interactieve Vergelijkingstabel met visuele voortgangsbalken
-        st.subheader("📋 Gecombineerde Beslismatrix (Alle Tabbladen Gekoppeld)")
         st.dataframe(
             df_matrix,
             use_container_width=True,
@@ -422,26 +532,24 @@ with tab_overview:
 # TAB 1: LOSSE BESTEMMING DEEP-DIVE
 # ==========================================
 with tab_single:
-    if not active_dest_pool:
-        st.warning("Geen bestemmingen beschikbaar.")
+    if not active_tab1_dests:
+        st.warning("Geen routes beschikbaar in Tabblad 1.")
     else:
-        col_sel, col_info = st.columns([1, 2])
+        col_sel, _ = st.columns([1, 2])
         with col_sel:
-            chosen_dest = st.selectbox("🎯 Selecteer één specifieke bestemming:", active_dest_pool)
+            chosen_dest = st.selectbox("🎯 Selecteer één route uit Tabblad 1:", active_tab1_dests)
         
-        row_dest = df_matrix[df_matrix["Bestemming"] == chosen_dest].iloc[0]
+        row_dest = df_matrix[df_matrix["Voorgestelde Route (Tab 1)"] == chosen_dest].iloc[0]
         s_conn = filter_df_multi(df_conn_raw, [chosen_dest], ['Destination', 'Route', 'Routing', 'Hub', 'Airline'])
         if s_conn.empty:
             s_conn = df_conn_raw
 
-        # 4 Compacte KPI's
         k1, k2, k3, k4 = st.columns(4)
         k1.metric("🏆 Potentie Score", f"{row_dest['Potentie Score']} / 100")
         k2.metric("💧 Terugwinbare PAX", f"{row_dest['Surface Leakage']:,}".replace(",", "."))
         k3.metric("🧭 Hoogste Keuzekans", f"{max(row_dest['Business Kans %'], row_dest['Leisure Kans %']):.1f}%")
         k4.metric("🥊 Concurrentie", f"{row_dest['Concurrentie (vl/wk)']} vl/wk")
 
-        # Compacte Signaal-Chips (vervangen grote tekstblokken)
         c_sig1, c_sig2, c_sig3, c_sig4 = st.columns(4)
         with c_sig1:
             st.markdown(f'<div class="signal-card"><div class="signal-label">Primair Segment</div><div class="signal-value">{row_dest["Segment"]}</div></div>', unsafe_allow_html=True)
@@ -455,7 +563,6 @@ with tab_single:
             rec_fleet = str(s_conn[fleet_col].mode()[0]) if (fleet_col and not s_conn.empty) else "E190 / B737-800"
             st.markdown(f'<div class="signal-card"><div class="signal-label">Geschikte Vloot</div><div class="signal-value">{rec_fleet}</div></div>', unsafe_allow_html=True)
 
-        # Visuele onderbouwing: Radar/Bar + Weekdag-grafiek
         v1, v2 = st.columns(2)
         with v1:
             max_l_val = pd.to_numeric(df_leak_raw['Pax leakage'], errors='coerce').max() if ('Pax leakage' in df_leak_raw.columns and not df_leak_raw.empty) else 1
@@ -497,7 +604,7 @@ with tab_single:
                 st.info("Geen weekdag-data beschikbaar voor deze selectie.")
 
 # ==========================================
-# TAB 2: PROPOSAL INVESTIGATION
+# TAB 2: PROPOSAL INVESTIGATION (TAB 1 DATA)
 # ==========================================
 with tab1:
     st.subheader("📍 Voorgestelde Routes (Proposal Investigation)")
@@ -537,37 +644,180 @@ with tab2:
         st.info("Geen data beschikbaar voor deze filterselectie.")
 
 # ==========================================
-# TAB 4: ROUTE COMPETITORS
+# TAB 4: ROUTE COMPETITORS (PER ROUTE + LANDKAART)
 # ==========================================
 with tab3:
-    st.subheader("🥊 Concurrentie & Catchment Overlap")
-    if not df_comp.empty:
-        # Extra lokale filter op Catchment
-        if 'Catchment' in df_comp.columns:
-            catchments = sorted(df_comp['Catchment'].dropna().unique().tolist())
-            sel_catch = st.multiselect("Filter op Catchment Zone:", catchments, default=catchments)
-            df_comp_view = df_comp[df_comp['Catchment'].isin(sel_catch)]
-        else:
-            df_comp_view = df_comp
+    st.subheader("🥊 Route Competitors — Concurrentie per Route op de Kaart")
 
-        c1, c2 = st.columns(2)
-        with c1:
-            if {'Routing', 'Frequency per Week', 'Catchment'}.issubset(df_comp_view.columns):
-                fig_freq = px.bar(
-                    df_comp_view, x='Routing', y='Frequency per Week', color='Catchment',
-                    color_discrete_sequence=GRQ_PALETTE, title="Wekelijkse Frequentie Concurrenten"
-                )
-                st.plotly_chart(style_fig(fig_freq), use_container_width=True)
-        with c2:
-            if {'Routing', 'PAX from catchment'}.issubset(df_comp_view.columns):
-                fig_pax = px.bar(
-                    df_comp_view, x='Routing', y='PAX from catchment',
-                    color_discrete_sequence=[GRQ_ORANGE], title="PAX uit GRQ Catchment"
-                )
-                st.plotly_chart(style_fig(fig_pax), use_container_width=True)
-        st.dataframe(df_comp_view, use_container_width=True, hide_index=True)
+    if df_comp_raw.empty:
+        st.info("Geen data beschikbaar in 'Route Competitors'.")
     else:
-        st.info("Geen data beschikbaar voor deze filterselectie.")
+        # Filter op specifieke route uit Tabblad 1 of alle routes
+        f_col1, f_col2 = st.columns([1.2, 1.8])
+        with f_col1:
+            comp_route_options = ["Alle routes uit Tabblad 1"] + prop_destinations
+            sel_comp_route = st.selectbox("Selecteer route om concurrenten te bekijken:", comp_route_options)
+        
+        if sel_comp_route != "Alle routes uit Tabblad 1":
+            df_comp_view = filter_df_multi(df_comp_raw, [sel_comp_route], ['Routing', 'Route', 'Destination'])
+        else:
+            df_comp_view = df_comp.copy()
+
+        with f_col2:
+            if 'Catchment' in df_comp_view.columns and not df_comp_view.empty:
+                catchments = sorted(df_comp_view['Catchment'].dropna().unique().tolist())
+                sel_catch = st.multiselect("Filter op Concurrerende Luchthaven / Catchment:", catchments, default=catchments)
+                df_comp_view = df_comp_view[df_comp_view['Catchment'].isin(sel_catch)]
+
+        if df_comp_view.empty:
+            st.warning("Geen concurrerende vluchten gevonden voor deze route-selectie.")
+        else:
+            # KPI's voor de geselecteerde route-concurrentie
+            ck1, ck2, ck3 = st.columns(3)
+            tot_c_freq = pd.to_numeric(df_comp_view['Frequency per Week'], errors='coerce').sum() if 'Frequency per Week' in df_comp_view.columns else 0
+            tot_c_pax = pd.to_numeric(df_comp_view['PAX from catchment'], errors='coerce').sum() if 'PAX from catchment' in df_comp_view.columns else 0
+            n_comp_airports = df_comp_view['Catchment'].nunique() if 'Catchment' in df_comp_view.columns else len(df_comp_view)
+            ck1.metric("Concurrerende Luchthavens", n_comp_airports)
+            ck2.metric("Totale Concurrentie Freq/wk", f"{int(tot_c_freq)} vl/wk")
+            ck3.metric("Weglekkende PAX uit Catchment", f"{int(tot_c_pax):,}".replace(",", "."))
+
+            # --- LANDKAART OPBOUWEN ---
+            map_points = []
+            # 1. Voeg altijd Groningen Airport Eelde (GRQ) toe als referentiepunt
+            grq_lat, grq_lon, grq_name = AIRPORT_COORDS["GRQ"]
+            map_points.append({
+                "Naam": grq_name,
+                "Type": "Eigen Luchthaven (GRQ)",
+                "lat": grq_lat,
+                "lon": grq_lon,
+                "PAX": tot_c_pax if tot_c_pax > 0 else 5000,
+                "Freq": 0,
+                "Info": "Groningen Airport Eelde (Referentiepunt)"
+            })
+
+            # 2. Zoek coördinaten van concurrerende luchthavens (uit 'Catchment' of 'Routing')
+            lat_col = find_col(df_comp_view, ['Lat', 'Latitude'])
+            lon_col = find_col(df_comp_view, ['Lon', 'Longitude', 'Lng'])
+
+            for _, row in df_comp_view.iterrows():
+                pax_val = pd.to_numeric(row.get('PAX from catchment', 0), errors='coerce') or 0
+                freq_val = pd.to_numeric(row.get('Frequency per Week', 0), errors='coerce') or 0
+                routing_str = str(row.get('Routing', ''))
+                catch_str = str(row.get('Catchment', ''))
+
+                # Kijk eerst of Excel zelf Lat/Lon kolommen heeft
+                if lat_col and lon_col and pd.notna(row[lat_col]) and pd.notna(row[lon_col]):
+                    lat, lon, label = float(row[lat_col]), float(row[lon_col]), catch_str or routing_str
+                else:
+                    # Probeer eerst de vertrekluchthaven (Catchment) te vinden, anders de bestemming uit Routing
+                    coords = resolve_coords(catch_str) or resolve_coords(routing_str)
+                    if coords:
+                        lat, lon, label = coords
+                    else:
+                        continue
+
+                map_points.append({
+                    "Naam": label,
+                    "Type": "Concurrerende Luchthaven / Route",
+                    "lat": lat,
+                    "lon": lon,
+                    "PAX": max(float(pax_val), 1000.0),
+                    "Freq": int(freq_val),
+                    "Info": f"{routing_str} ({catch_str}) | {int(freq_val)} vl/wk | {int(pax_val):,} PAX".replace(",", ".")
+                })
+
+            df_map = pd.DataFrame(map_points)
+
+            # Aggregeer als meerdere rijen op dezelfde luchthaven vallen
+            if len(df_map) > 1:
+                df_map_agg = df_map.groupby(["Naam", "Type", "lat", "lon"], as_index=False).agg({
+                    "PAX": "sum",
+                    "Freq": "sum",
+                    "Info": lambda x: "<br>".join(list(dict.fromkeys(x)))
+                })
+
+                fig_map = go.Figure()
+
+                # Teken verbindingslijnen van GRQ naar de concurrerende luchthavens
+                for _, mrow in df_map_agg[df_map_agg["Type"] != "Eigen Luchthaven (GRQ)"].iterrows():
+                    fig_map.add_trace(go.Scattergeo(
+                        lon=[grq_lon, mrow["lon"]],
+                        lat=[grq_lat, mrow["lat"]],
+                        mode="lines",
+                        line=dict(width=1.5, color="rgba(243, 112, 33, 0.45)", dash="dot"),
+                        hoverinfo="skip",
+                        showlegend=False
+                    ))
+
+                # Teken de punten op de landkaart
+                for p_type, p_color, p_symbol in [
+                    ("Eigen Luchthaven (GRQ)", GRQ_ORANGE, "star"),
+                    ("Concurrerende Luchthaven / Route", GRQ_TEAL, "circle")
+                ]:
+                    sub_m = df_map_agg[df_map_agg["Type"] == p_type]
+                    if not sub_m.empty:
+                        sizes = [18] if p_type == "Eigen Luchthaven (GRQ)" else [
+                            max(12, min(38, (val / df_map_agg["PAX"].max()) * 38)) for val in sub_m["PAX"]
+                        ]
+                        fig_map.add_trace(go.Scattergeo(
+                            lon=sub_m["lon"],
+                            lat=sub_m["lat"],
+                            text=sub_m["Naam"],
+                            customdata=sub_m["Info"],
+                            hovertemplate="<b>%{text}</b><br>%{customdata}<extra></extra>",
+                            mode="markers+text",
+                            textposition="top center",
+                            name=p_type,
+                            marker=dict(
+                                size=sizes,
+                                color=p_color,
+                                symbol=p_symbol,
+                                line=dict(width=1.5, color="#FFFFFF")
+                            )
+                        ))
+
+                fig_map.update_geos(
+                    scope="europe",
+                    resolution=50,
+                    showcountries=True,
+                    countrycolor="rgba(128,128,128,0.45)",
+                    showcoastlines=True,
+                    coastlinecolor="rgba(128,128,128,0.45)",
+                    showland=True,
+                    landcolor="rgba(128,128,128,0.12)",
+                    showocean=True,
+                    oceancolor="rgba(0,0,0,0)",
+                    center=dict(lat=51.8, lon=6.5),
+                    projection_scale=4.2
+                )
+                fig_map.update_layout(
+                    title=f"Geografische Concurrentiekaart: {sel_comp_route}",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    geo_bgcolor="rgba(0,0,0,0)",
+                    height=500,
+                    margin=dict(t=45, b=10, l=10, r=10),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.01, xanchor="right", x=1)
+                )
+                st.plotly_chart(fig_map, use_container_width=True)
+
+            # Staafdiagrammen onder de kaart voor exacte vergelijking per routing
+            c1, c2 = st.columns(2)
+            with c1:
+                if {'Routing', 'Frequency per Week', 'Catchment'}.issubset(df_comp_view.columns):
+                    fig_freq = px.bar(
+                        df_comp_view, x='Routing', y='Frequency per Week', color='Catchment',
+                        color_discrete_sequence=GRQ_PALETTE, title="Wekelijkse Frequentie per Concurrent"
+                    )
+                    st.plotly_chart(style_fig(fig_freq), use_container_width=True)
+            with c2:
+                if {'Routing', 'PAX from catchment', 'Catchment'}.issubset(df_comp_view.columns):
+                    fig_pax = px.bar(
+                        df_comp_view, x='Routing', y='PAX from catchment', color='Catchment',
+                        color_discrete_sequence=GRQ_PALETTE, title="PAX uit GRQ Catchment per Routing"
+                    )
+                    st.plotly_chart(style_fig(fig_pax), use_container_width=True)
+
+            st.dataframe(df_comp_view, use_container_width=True, hide_index=True)
 
 # ==========================================
 # TAB 5: SURFACE LEAKAGE
@@ -639,3 +889,5 @@ st.markdown(
     '</div>',
     unsafe_allow_html=True
 )
+
+```
